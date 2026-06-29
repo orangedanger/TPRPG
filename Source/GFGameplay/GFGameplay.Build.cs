@@ -10,14 +10,16 @@ public class GFGameplay : ModuleRules
             new string[]
             {
                 "Core",
+                "CoreUObject",
+                "Engine",
+                "InputCore", 
+                "EnhancedInput", 
             }
         );
 
         PrivateDependencyModuleNames.AddRange(
             new string[]
             {
-                "CoreUObject",
-                "Engine",
                 "Slate",
                 "SlateCore"
             }
