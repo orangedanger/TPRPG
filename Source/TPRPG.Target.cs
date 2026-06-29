@@ -16,6 +16,6 @@ public class TPRPGTarget : TargetRules
 
 	private void RegisterModulesCreatedByRider()
 	{
-		ExtraModuleNames.AddRange(new string[] { "Gameplay", "GFGameplay" });
+		ExtraModuleNames.Add("GFGameplay");
 	}
 }
