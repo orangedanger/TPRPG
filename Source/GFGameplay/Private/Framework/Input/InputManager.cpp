@@ -4,7 +4,6 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/DataTable.h"
 #include "Framework/PlayerController/GFPlayerController.h"
-#include "GameFramework/Character.h"
 #include "InputMappingContext.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGFInputManager, Log, All);
@@ -33,14 +32,14 @@ void UInputManager::RefreshLocalPlayerSubsystem()
 {
 	LocalPlayerSubsystem = nullptr;
 
-	if (!OwnerController)
+	if (OwnerController == nullptr)
 	{
 		UE_LOG(LogGFInputManager, Verbose, TEXT("Cannot refresh input subsystem without an owner controller."));
 		return;
 	}
 
 	ULocalPlayer* LocalPlayer = OwnerController->GetLocalPlayer();
-	if (!LocalPlayer)
+	if (LocalPlayer == nullptr)
 	{
 		UE_LOG(LogGFInputManager, Verbose, TEXT("Controller %s has no local player."), *GetNameSafe(OwnerController));
 		return;
@@ -51,12 +50,12 @@ void UInputManager::RefreshLocalPlayerSubsystem()
 
 void UInputManager::ApplyMappingContexts()
 {
-	if (!LocalPlayerSubsystem)
+	if (LocalPlayerSubsystem == nullptr)
 	{
 		RefreshLocalPlayerSubsystem();
 	}
 
-	if (!LocalPlayerSubsystem)
+	if (LocalPlayerSubsystem == nullptr)
 	{
 		UE_LOG(LogGFInputManager, Verbose, TEXT("Cannot apply mapping contexts without a local player subsystem."));
 		return;
@@ -64,7 +63,7 @@ void UInputManager::ApplyMappingContexts()
 
 	for (const FInputMappingContextConfig& Config : MappingContexts)
 	{
-		if (!Config.MappingContext)
+		if (Config.MappingContext == nullptr)
 		{
 			UE_LOG(LogGFInputManager, Warning, TEXT("Cannot add a null input mapping context."));
 			continue;
@@ -82,7 +81,7 @@ void UInputManager::ApplyMappingContexts()
 
 void UInputManager::ClearMappingContexts()
 {
-	if (!LocalPlayerSubsystem)
+	if (LocalPlayerSubsystem == nullptr)
 	{
 		RefreshLocalPlayerSubsystem();
 	}
@@ -91,7 +90,7 @@ void UInputManager::ClearMappingContexts()
 	{
 		for (UInputMappingContext* MappingContext : ActiveMappingContexts)
 		{
-			if (MappingContext)
+			if (MappingContext != nullptr)
 			{
 				LocalPlayerSubsystem->RemoveMappingContext(MappingContext);
 			}
@@ -106,7 +105,7 @@ void UInputManager::BindConfiguredActions()
 	ClearBindings();
 	BindingRecords.Reset();
 
-	if (!InputActionTable)
+	if (InputActionTable == nullptr)
 	{
 		UE_LOG(LogGFInputManager, Verbose, TEXT("Input action table is not configured."));
 		return;
@@ -117,7 +116,7 @@ void UInputManager::BindConfiguredActions()
 
 	for (const FInputActionTableRow* Row : Rows)
 	{
-		if (Row)
+		if (Row != nullptr)
 		{
 			AddConfiguredBindingRecord(*Row);
 		}
@@ -170,69 +169,27 @@ void UInputManager::ClearBindings()
 
 void UInputManager::HandleMoveInput(const FInputActionValue& Value)
 {
-	if (!OwnerController)
-	{
-		return;
-	}
-
-	APawn* ControlledPawn = OwnerController->GetPawn();
-	if (!ControlledPawn)
-	{
-		return;
-	}
-
-	const FVector2D MovementVector = Value.Get<FVector2D>();
-	const FRotator ControlRotation = OwnerController->GetControlRotation();
-	const FRotator YawRotation(0.0f, ControlRotation.Yaw, 0.0f);
-
-	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-	// TODO: 后续通过委托广播输入事件，让移动逻辑在角色或组件中完成。
-	ControlledPawn->AddMovementInput(ForwardDirection, MovementVector.Y);
-	ControlledPawn->AddMovementInput(RightDirection, MovementVector.X);
+	OnMoveInput.Broadcast(Value.Get<FVector2D>());
 }
 
 void UInputManager::HandleLookInput(const FInputActionValue& Value)
 {
-	if (!OwnerController)
-	{
-		return;
-	}
-
-	const FVector2D LookAxisVector = Value.Get<FVector2D>();
-
-	// TODO: 后续通过委托广播输入事件，让镜头逻辑在角色或相机组件中完成。
-	OwnerController->AddYawInput(LookAxisVector.X);
-	OwnerController->AddPitchInput(LookAxisVector.Y);
+	OnLookInput.Broadcast(Value.Get<FVector2D>());
 }
 
-void UInputManager::HandleJumpInput(const FInputActionValue& Value)
+void UInputManager::HandleJumpInput(const FInputActionValue&)
 {
-	if (!OwnerController)
-	{
-		return;
-	}
-
-	ACharacter* ControlledCharacter = Cast<ACharacter>(OwnerController->GetPawn());
-	if (!ControlledCharacter)
-	{
-		return;
-	}
-
-	// TODO: 后续通过委托广播输入事件，让跳跃逻辑在角色或移动组件中完成。
-	ControlledCharacter->Jump();
+	OnJumpInput.Broadcast();
 }
 
-void UInputManager::HandleAttackInput(const FInputActionValue& Value)
+void UInputManager::HandleAttackInput(const FInputActionValue&)
 {
-	// TODO: 后续通过委托广播输入事件，让攻击逻辑在战斗组件或能力系统中完成。
-	UE_LOG(LogGFInputManager, Log, TEXT("Attack input triggered."));
+	OnAttackInput.Broadcast();
 }
 
 void UInputManager::AddConfiguredBindingRecord(const FInputActionTableRow& Row)
 {
-	if (!Row.InputAction)
+	if (Row.InputAction == nullptr)
 	{
 		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot bind a null input action."));
 		return;
@@ -288,7 +245,7 @@ void UInputManager::BindRecord(FInputActionBindingRecord& Record)
 
 	FEnhancedInputActionEventBinding* Binding = nullptr;
 
-	// 根据 DataTable 中的动作类型绑定到固定的 C++ 处理函数，避免外部参与绑定。
+	// 根据 DataTable 中的动作类型绑定到固定 C++ 处理函数，避免外部参与 Enhanced Input 绑定细节。
 	switch (Record.ActionType)
 	{
 	case EInputActionType::Move:
@@ -308,7 +265,7 @@ void UInputManager::BindRecord(FInputActionBindingRecord& Record)
 		break;
 	}
 
-	if (!Binding)
+	if (Binding == nullptr)
 	{
 		return;
 	}
@@ -319,7 +276,7 @@ void UInputManager::BindRecord(FInputActionBindingRecord& Record)
 
 void UInputManager::UnbindRecord(FInputActionBindingRecord& Record)
 {
-	if (!EnhancedInputComponent || !Record.bIsBound)
+	if (EnhancedInputComponent == nullptr || !Record.bIsBound)
 	{
 		Record.BindingHandle = 0;
 		Record.bIsBound = false;
@@ -333,5 +290,5 @@ void UInputManager::UnbindRecord(FInputActionBindingRecord& Record)
 
 bool UInputManager::CanBindRecord(const FInputActionBindingRecord& Record) const
 {
-	return EnhancedInputComponent && Record.InputAction;
+	return EnhancedInputComponent != nullptr && Record.InputAction != nullptr;
 }

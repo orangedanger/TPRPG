@@ -13,7 +13,7 @@ void AGFPlayerController::BeginPlay()
 	Super::BeginPlay();
 
 	InitializeInputManager();
-	if (InputManager)
+	if (InputManager != nullptr)
 	{
 		InputManager->RefreshLocalPlayerSubsystem();
 	}
@@ -24,7 +24,7 @@ void AGFPlayerController::OnPossess(APawn* InPawn)
 	Super::OnPossess(InPawn);
 
 	InitializeInputManager();
-	if (InputManager)
+	if (InputManager != nullptr)
 	{
 		InputManager->RefreshLocalPlayerSubsystem();
 	}
@@ -35,7 +35,7 @@ void AGFPlayerController::OnRep_Pawn()
 	Super::OnRep_Pawn();
 
 	InitializeInputManager();
-	if (InputManager)
+	if (InputManager != nullptr)
 	{
 		InputManager->RefreshLocalPlayerSubsystem();
 	}
@@ -48,7 +48,7 @@ void AGFPlayerController::SetupInputComponent()
 	InitializeInputManager();
 
 	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent);
-	if (InputManager && EnhancedInputComponent)
+	if (InputManager != nullptr && EnhancedInputComponent != nullptr)
 	{
 		InputManager->SetInputComponent(EnhancedInputComponent);
 	}
@@ -56,18 +56,18 @@ void AGFPlayerController::SetupInputComponent()
 
 void AGFPlayerController::InitializeInputManager()
 {
-	if (!InputManager)
+	if (InputManager == nullptr)
 	{
 		// Allow Blueprint controllers to provide a configured InputManager subclass.
 		TSubclassOf<UInputManager> ClassToCreate = InputManagerClass;
-		if (!ClassToCreate)
+		if (ClassToCreate == nullptr)
 		{
 			ClassToCreate = UInputManager::StaticClass();
 		}
 		InputManager = NewObject<UInputManager>(this, ClassToCreate, TEXT("InputManager"));
 	}
 
-	if (InputManager)
+	if (InputManager != nullptr)
 	{
 		InputManager->Initialize(this);
 	}

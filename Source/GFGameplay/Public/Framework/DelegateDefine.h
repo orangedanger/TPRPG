@@ -1,0 +1,15 @@
+#pragma once
+
+#include "CoreMinimal.h"
+
+/** 移动输入委托类型，参数为已经解析后的二维移动轴。 */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnMoveInput, const FVector2D&);
+
+/** 镜头输入委托类型，参数为已经解析后的二维视角轴。 */
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnLookInput, const FVector2D&);
+
+/** 跳跃输入委托类型，按键类事件不携带原始输入参数。 */
+DECLARE_MULTICAST_DELEGATE(FOnJumpInput);
+
+/** 攻击输入委托类型，按键类事件不携带原始输入参数。 */
+DECLARE_MULTICAST_DELEGATE(FOnAttackInput);

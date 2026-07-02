@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "InputActionValue.h"
+#include "Framework/DelegateDefine.h"
 #include "Framework/Input/InputDefine.h"
 #include "UObject/Object.h"
 #include "InputManager.generated.h"
@@ -10,9 +11,11 @@ class AGFPlayerController;
 class UDataTable;
 class UEnhancedInputComponent;
 class UEnhancedInputLocalPlayerSubsystem;
+class UInputMappingContext;
 
 /**
  * 负责为 PlayerController 管理 Enhanced Input 的 MappingContext 和 DataTable 驱动的 Action 绑定。
+ * 输入管理器只把 Enhanced Input 转换成自身实例上的输入委托，具体玩法响应由角色或组件订阅处理。
  */
 UCLASS(Blueprintable, BlueprintType)
 class GFGAMEPLAY_API UInputManager : public UObject
@@ -53,6 +56,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void ClearBindings();
 
+	/** Move 输入被触发时广播，订阅者应属于同一个 PlayerController 输入上下文。 */
+	FOnMoveInput OnMoveInput;
+
+	/** Look 输入被触发时广播，订阅者应属于同一个 PlayerController 输入上下文。 */
+	FOnLookInput OnLookInput;
+
+	/** Jump 输入被触发时广播，不暴露原始 Enhanced Input 值。 */
+	FOnJumpInput OnJumpInput;
+
+	/** Attack 输入被触发时广播，不暴露原始 Enhanced Input 值。 */
+	FOnAttackInput OnAttackInput;
+
 protected:
 	/** 由输入管理器持有并在初始化时应用的 MappingContext 配置。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -62,16 +77,16 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UDataTable> InputActionTable = nullptr;
 
-	/** Move 输入的集中处理入口，当前为空实现。 */
+	/** Move 输入的集中处理入口。 */
 	void HandleMoveInput(const FInputActionValue& Value);
 
-	/** Look 输入的集中处理入口，当前为空实现。 */
+	/** Look 输入的集中处理入口。 */
 	void HandleLookInput(const FInputActionValue& Value);
 
-	/** Jump 输入的集中处理入口，当前为空实现。 */
+	/** Jump 输入只广播意图，不向玩法层暴露按键输入值。 */
 	void HandleJumpInput(const FInputActionValue& Value);
 
-	/** Attack 输入的集中处理入口，当前为空实现。 */
+	/** Attack 输入只广播意图，不向玩法层暴露按键输入值。 */
 	void HandleAttackInput(const FInputActionValue& Value);
 
 	/** 拥有当前输入管理器的 PlayerController。 */
