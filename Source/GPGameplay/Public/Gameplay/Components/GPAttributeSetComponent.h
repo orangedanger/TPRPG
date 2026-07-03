@@ -2,9 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Framework/DelegateDefine.h"
 #include "GPAttributeSetComponent.generated.h"
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActorDead,AActor*,Owner);
 
 /**
  * 轻量角色属性组件，保存当前 Demo 需要的生命值和死亡状态。
@@ -38,9 +37,9 @@ protected:
 	virtual void BeginPlay() override;
 	
 public:
-	/** 添加一个委托通知 Actor已经死亡。 */
-	UPROPERTY(BlueprintAssignable)
-	FOnActorDead OnActorDead;
+	/** Owner 首次进入死亡状态时广播，角色可绑定它执行死亡表现。 */
+	UPROPERTY(BlueprintAssignable, Category = "GP|Attribute")
+	FGFActorDeadDelegate OnOwnerDead;
 private:
 	/** 当前生命值，只通过 SetHealth 修改以保持状态一致。 */
 	UPROPERTY()

@@ -18,14 +18,15 @@ void UGPAttributeSetComponent::SetHealth(float NewHealth)
 {
 	const float ClampedMaxHealth = FMath::Max(0.0f, MaxHealth);
 	const float OldHealth = Health;
+	const bool bWasDead = bDead;
 	Health = FMath::Clamp(NewHealth, 0.0f, ClampedMaxHealth);
+	bDead = Health <= 0.0f;
 	UE_LOG(LogGPAttributeSetComponent, Log, TEXT("Health changed. Owner=%s OldHealth=%.2f NewHealth=%.2f RequestedHealth=%.2f MaxHealth=%.2f"), *GetNameSafe(GetOwner()), OldHealth, Health, NewHealth, ClampedMaxHealth);
 
-	if (Health <= 0.0f)
+	if (!bWasDead && bDead)
 	{
 		UE_LOG(LogGPAttributeSetComponent, Log, TEXT("Actor dead. Owner=%s"), *GetNameSafe(GetOwner()));
-		bDead = true;
-		OnActorDead.Broadcast(GetOwner());
+		OnOwnerDead.Broadcast(GetOwner());
 	}
 }
 

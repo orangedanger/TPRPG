@@ -39,7 +39,7 @@ struct FInputMappingContextConfig
 };
 
 /**
- * 描述一条由 UInputManager 负责绑定的 InputAction DataTable 行。
+ * 描述一条由玩法输入管理器负责绑定的 InputAction DataTable 行。
  */
 USTRUCT(BlueprintType)
 struct FInputActionTableRow : public FTableRowBase
@@ -54,7 +54,7 @@ struct FInputActionTableRow : public FTableRowBase
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UInputAction> InputAction = nullptr;
 
-	/** 该绑定使用的 Enhanced Input 触发事件。 */
+	/** 该绑定使用的 Enhanced Input 触发事件；按键类输入可由具体输入管理器拆成按下和松开。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	ETriggerEvent TriggerEvent = ETriggerEvent::Triggered;
 };

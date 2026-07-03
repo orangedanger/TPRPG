@@ -1,27 +1,30 @@
-﻿#include "Framework/PlayerController/GFPlayerController.h"
+#include "Framework/PlayerController/GFPlayerController.h"
 
 #include "EnhancedInputComponent.h"
-#include "Framework/Input/InputManager.h"
+#include "Framework/Input/GFInputManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGFPlayerController, Log, All);
 
 AGFPlayerController::AGFPlayerController()
 {
 	bReplicates = true;
+	InputManagerClass = UGFInputManager::StaticClass();
 }
 
 void AGFPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
-	InitializeInputManager();
+	InitializeInput();
 }
 
 void AGFPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();
 
-	if (!IsLocalController())
+	InitializeInput();
+
+	if (IsLocalController() == false)
 	{
 		return;
 	}
@@ -45,34 +48,59 @@ void AGFPlayerController::SetupInputComponent()
 		return;
 	}
 
+	if (ConfiguredEnhancedInputComponent == EnhancedInputComponent)
+	{
+		return;
+	}
+
 	InputManager->SetInputComponent(EnhancedInputComponent);
+	ConfiguredEnhancedInputComponent = EnhancedInputComponent;
 }
 
-void AGFPlayerController::InitializeInputManager()
+void AGFPlayerController::PlayerTick(float DeltaTime)
 {
-	if (!IsLocalController())
+	Super::PlayerTick(DeltaTime);
+
+	if (IsLocalController() == false || InputManager == nullptr)
 	{
 		return;
 	}
 
-	if (InputManager != nullptr)
+	InputManager->UpdateInputActions(DeltaTime);
+}
+
+void AGFPlayerController::InitializeInput()
+{
+	if (bInputInitialized)
 	{
 		return;
 	}
-	// 蓝图控制器通常在这里指定带输入资源配置的 UInputManager 子类。
-	TSubclassOf<UInputManager> ClassToCreate = InputManagerClass;
-	if (ClassToCreate == nullptr)
-	{
-		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is not configured on %s. Falling back to UInputManager without Blueprint input assets."), *GetNameSafe(this));
-		ClassToCreate = UInputManager::StaticClass();
-	}
 
-	InputManager = NewObject<UInputManager>(this, ClassToCreate, TEXT("InputManager"));
-	if (InputManager == nullptr)
+	if (IsLocalController() == false)
 	{
-		UE_LOG(LogGFPlayerController, Warning, TEXT("Failed to create InputManager. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(ClassToCreate));
 		return;
 	}
 
-	InputManager->Initialize(this);
+	if (InputManagerClass == nullptr)
+	{
+		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is not configured. Controller=%s"), *GetNameSafe(this));
+	}
+	else if (InputManagerClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is abstract and cannot be created. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(InputManagerClass));
+	}
+	else
+	{
+		InputManager = NewObject<UGFInputManager>(this, InputManagerClass, TEXT("InputManager"));
+		if (InputManager == nullptr)
+		{
+			UE_LOG(LogGFPlayerController, Warning, TEXT("Failed to create input manager. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(InputManagerClass));
+		}
+		else
+		{
+			InputManager->Initialize(this);
+		}
+	}
+
+	bInputInitialized = true;
 }

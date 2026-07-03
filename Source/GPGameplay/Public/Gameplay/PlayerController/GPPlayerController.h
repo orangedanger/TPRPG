@@ -5,7 +5,7 @@
 #include "GPPlayerController.generated.h"
 
 /**
- * Gameplay player controller for project-specific input manager configuration.
+ * 项目玩法 PlayerController，目前复用 GF 层输入初始化和输入管理器。
  */
 UCLASS(Blueprintable)
 class GPGAMEPLAY_API AGPPlayerController : public AGFPlayerController

@@ -4,14 +4,13 @@
 #include "Framework/Character/GFCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Framework/PlayerController/GFPlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 
 AGFCharacter::AGFCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
-	bReplicates = true;
-	
 	bReplicates = true;
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
@@ -40,6 +39,9 @@ AGFCharacter::AGFCharacter()
 void AGFCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	// 当前 Demo 在 BeginPlay 缓存一次控制器，派生类后续通过该指针访问输入委托。
+	PlayerController = Cast<AGFPlayerController>(GetController());
 }
 
 USpringArmComponent* AGFCharacter::GetCameraBoom() const

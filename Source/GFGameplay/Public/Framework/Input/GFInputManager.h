@@ -1,11 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "InputActionValue.h"
-#include "Framework/DelegateDefine.h"
 #include "Framework/Input/InputDefine.h"
+#include "InputActionValue.h"
 #include "UObject/Object.h"
-#include "InputManager.generated.h"
+#include "GFInputManager.generated.h"
 
 class AGFPlayerController;
 class UDataTable;
@@ -14,20 +13,35 @@ class UEnhancedInputLocalPlayerSubsystem;
 class UInputMappingContext;
 
 /**
- * 负责为 PlayerController 管理 Enhanced Input 的 MappingContext 和 DataTable 驱动的 Action 绑定。
- * 输入管理器只把 Enhanced Input 转换成自身实例上的输入委托，具体玩法响应由角色或组件订阅处理。
+ * 输入事件标签，非轴类输入先缓存标签，再在 UpdateInputActions 中统一处理。
+ */
+UENUM(BlueprintType)
+enum class EGFInputActionTag : uint8
+{
+	None,
+	Input_Jump_Pressed,
+	Input_Jump_Released,
+	Input_Attack_Pressed,
+	Input_Attack_Released
+};
+
+/**
+ * Gameplay Framework 输入管理器，负责 Enhanced Input 绑定、输入缓存和向控制器输入委托对象广播。
  */
 UCLASS(Blueprintable, BlueprintType)
-class GFGAMEPLAY_API UInputManager : public UObject
+class GFGAMEPLAY_API UGFInputManager : public UObject
 {
 	GENERATED_BODY()
 
 public:
 	/** 设置所属 PlayerController，缓存本地玩家输入子系统，并应用配置的 MappingContext。 */
-	void Initialize(AGFPlayerController* InOwner);
+	virtual void Initialize(AGFPlayerController* InOwner);
 
 	/** 设置接收 Action 绑定的 Enhanced Input 组件，随后绑定 DataTable 中配置的 Action。 */
-	void SetInputComponent(UEnhancedInputComponent* InInputComponent);
+	virtual void SetInputComponent(UEnhancedInputComponent* InInputComponent);
+
+	/** 每帧处理缓存的按键类输入标签，并广播到 Controller 持有的委托对象。 */
+	virtual void UpdateInputActions(float DeltaTime);
 
 	/** 将配置的 MappingContext 添加到初始化时缓存的 Enhanced Input 子系统。 */
 	UFUNCTION(BlueprintCallable, Category = "Input")
@@ -41,18 +55,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void BindConfiguredActions();
 
-	/** Move 输入被触发时广播，订阅者应属于同一个 PlayerController 输入上下文。 */
-	FOnMoveInput OnMoveInput;
-
-	/** Look 输入被触发时广播，订阅者应属于同一个 PlayerController 输入上下文。 */
-	FOnLookInput OnLookInput;
-
-	/** Jump 输入被触发时广播，不暴露原始 Enhanced Input 值。 */
-	FOnJumpInput OnJumpInput;
-
-	/** Attack 输入被触发时广播，不暴露原始 Enhanced Input 值。 */
-	FOnAttackInput OnAttackInput;
-
 protected:
 	/** 由输入管理器持有并在 Initialize 时应用的 MappingContext 配置。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -62,17 +64,23 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TObjectPtr<UDataTable> InputActionTable = nullptr;
 
-	/** Move 输入的集中处理入口。 */
+	/** Move 输入单独处理，因为它携带 FVector2D。 */
 	void HandleMoveInput(const FInputActionValue& Value);
 
-	/** Look 输入的集中处理入口。 */
+	/** Look 输入单独处理，因为它携带 FVector2D。 */
 	void HandleLookInput(const FInputActionValue& Value);
 
-	/** Jump 输入只广播意图，不向玩法层暴露按键输入值。 */
-	void HandleJumpInput(const FInputActionValue& Value);
+	/** Jump 按下只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	void HandleJumpPressedInput();
 
-	/** Attack 输入只广播意图，不向玩法层暴露按键输入值。 */
-	void HandleAttackInput(const FInputActionValue& Value);
+	/** Jump 松开只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	void HandleJumpReleasedInput();
+
+	/** Attack 按下只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	void HandleAttackPressedInput();
+
+	/** Attack 松开只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	void HandleAttackReleasedInput();
 
 	/** 拥有当前输入管理器的 PlayerController。 */
 	UPROPERTY(Transient)
@@ -91,13 +99,20 @@ protected:
 	TArray<TObjectPtr<UInputMappingContext>> ActiveMappingContexts;
 
 	/** 从 DataTable 加载并绑定到 Enhanced Input 的运行时记录。 */
+	UPROPERTY(Transient)
 	TArray<FInputActionBindingRecord> BindingRecords;
+
+	/** 本帧等待处理的按键类输入标签。 */
+	TArray<EGFInputActionTag> PendingInputTags;
 
 private:
 	void CacheLocalPlayerSubsystem();
 	void AddConfiguredBindingRecord(const FInputActionTableRow& Row);
+	void AddBindingRecord(EInputActionType ActionType, UInputAction* InputAction, ETriggerEvent TriggerEvent);
 	void BindRecord(FInputActionBindingRecord& Record);
 	void UnbindRecord(FInputActionBindingRecord& Record);
 	void ClearActionBindings();
+	void QueueInputAction(EGFInputActionTag InputTag);
+	void ProcessInputAction(EGFInputActionTag InputTag);
 	bool CanBindRecord(const FInputActionBindingRecord& Record) const;
 };

@@ -7,11 +7,11 @@
 
 class UGPAttributeSetComponent;
 class UGPCombatComponent;
-class UInputManager;
+class AGPPlayerController;
 
 /**
  * 项目默认角色，负责组合属性与战斗组件，并作为当前 Demo 的输入响应者、伤害发起者和伤害接收者。
- * 输入管理器只广播输入意图，角色订阅后把移动、镜头、跳跃和攻击分发到对应玩法实现。
+ * 角色通过当前 PlayerController 持有的输入委托对象订阅基础角色输入，攻击输入由战斗组件自行订阅。
  */
 UCLASS(Blueprintable)
 class GPGAMEPLAY_API AGPCharacter : public AGFCharacter, public IDamageManagerInterface
@@ -48,7 +48,13 @@ protected:
 	TObjectPtr<UGPCombatComponent> CombatComponent;
 
 private:
-	/** 初始化当前控制器上的输入管理器委托绑定，当前 Demo 只在 BeginPlay 执行一次。 */
+	/** 初始化属性组件上的状态委托绑定，用于响应死亡等属性变化。 */
+	void InitializeAttributeDelegateBindings();
+
+	/** 清理属性组件委托绑定，避免销毁后继续收到组件广播。 */
+	void ClearAttributeDelegateBindings();
+
+	/** 初始化当前控制器输入委托对象上的绑定，当前 Demo 只在 BeginPlay 执行一次。 */
 	void InitializeInputDelegateBindings();
 
 	/** 清理输入委托绑定，避免销毁后留下悬挂回调。 */
@@ -60,14 +66,17 @@ private:
 	/** 响应镜头输入委托，把二维视角轴转交给控制器。 */
 	void HandleLookInput(const FVector2D& LookAxisVector);
 
-	/** 响应跳跃输入委托。 */
-	void HandleJumpInput();
+	/** 响应跳跃按下输入委托。 */
+	void HandleJumpPressedInput();
 
-	/** 响应攻击输入委托，并把战斗行为转交给 CombatComponent。 */
-	void HandleAttackInput();
+	/** 响应跳跃松开输入委托。 */
+	void HandleJumpReleasedInput();
 
-	/** 当前已经绑定过的输入管理器，用于销毁时从正确实例清理回调。 */
-	UPROPERTY(Transient)
-	TObjectPtr<UInputManager> BoundInputManager = nullptr;
+	/** 响应属性组件死亡广播，当前只触发角色本地死亡表现。 */
+	UFUNCTION()
+	void HandleAttributeOwnerDead(AActor* DeadActor);
 
+	// TODO: 临时死亡效果
+	/** 让 Mesh 进入布娃娃并关闭 Capsule 碰撞，后续正式死亡流程会替换这里。 */
+	void ApplyDeathRagdoll();
 };

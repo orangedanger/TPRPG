@@ -1,9 +1,11 @@
 #include "Gameplay/Character/GPCharacter.h"
 
-#include "Framework/Input/InputManager.h"
-#include "Framework/PlayerController/GFPlayerController.h"
+#include "Framework/Input/GFInputDelegates.h"
+#include "Gameplay/PlayerController/GPPlayerController.h"
 #include "Gameplay/Components/GPAttributeSetComponent.h"
 #include "Gameplay/Components/GPCombatComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGPCharacter, Log, All);
 
@@ -17,12 +19,14 @@ AGPCharacter::AGPCharacter()
 void AGPCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
+	InitializeAttributeDelegateBindings();
 	InitializeInputDelegateBindings();
 }
 
 void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	ClearAttributeDelegateBindings();
 	ClearInputDelegateBindings();
 
 	Super::EndPlay(EndPlayReason);
@@ -67,53 +71,105 @@ void AGPCharacter::TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, fl
  * IDamageManagerInterface End
  */
 
+// Begin attribute delegate handlers
+void AGPCharacter::InitializeAttributeDelegateBindings()
+{
+	if (AttributeSetComponent == nullptr)
+	{
+		return;
+	}
+
+	AttributeSetComponent->OnOwnerDead.AddDynamic(this, &AGPCharacter::HandleAttributeOwnerDead);
+}
+
+void AGPCharacter::ClearAttributeDelegateBindings()
+{
+	if (AttributeSetComponent == nullptr)
+	{
+		return;
+	}
+
+	AttributeSetComponent->OnOwnerDead.RemoveAll(this);
+}
+
+void AGPCharacter::HandleAttributeOwnerDead(AActor* DeadActor)
+{
+	if (DeadActor != this)
+	{
+		return;
+	}
+
+	ApplyDeathRagdoll();
+}
+
+// TODO: 临时死亡效果
+void AGPCharacter::ApplyDeathRagdoll()
+{
+	UCapsuleComponent* OwnerCapsule = GetCapsuleComponent();
+	if (OwnerCapsule != nullptr)
+	{
+		OwnerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		OwnerCapsule->SetGenerateOverlapEvents(false);
+	}
+
+	USkeletalMeshComponent* OwnerMesh = GetMesh();
+	if (OwnerMesh != nullptr)
+	{
+		OwnerMesh->SetCollisionProfileName(TEXT("Ragdoll"));
+		OwnerMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		OwnerMesh->SetSimulatePhysics(true);
+		OwnerMesh->WakeAllRigidBodies();
+	}
+}
+// End attribute delegate handlers
+
 // Begin input delegate handlers
 void AGPCharacter::InitializeInputDelegateBindings()
 {
 	ClearInputDelegateBindings();
-
-	AGFPlayerController* PlayerController = Cast<AGFPlayerController>(GetController());
+	
 	if (PlayerController == nullptr)
 	{
 		return;
 	}
 
-	UInputManager* InputManager = PlayerController->GetInputManager();
-	if (InputManager == nullptr)
+	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
+	if (InputDelegates == nullptr)
 	{
 		return;
 	}
-
-	BoundInputManager = InputManager;
-	BoundInputManager->OnMoveInput.AddUObject(this, &AGPCharacter::HandleMoveInput);
-	BoundInputManager->OnLookInput.AddUObject(this, &AGPCharacter::HandleLookInput);
-	BoundInputManager->OnJumpInput.AddUObject(this, &AGPCharacter::HandleJumpInput);
-	BoundInputManager->OnAttackInput.AddUObject(this, &AGPCharacter::HandleAttackInput);
+	
+	InputDelegates->OnMoveInput.AddUObject(this, &AGPCharacter::HandleMoveInput);
+	InputDelegates->OnLookInput.AddUObject(this, &AGPCharacter::HandleLookInput);
+	InputDelegates->OnJumpPressed.AddUObject(this, &AGPCharacter::HandleJumpPressedInput);
+	InputDelegates->OnJumpReleased.AddUObject(this, &AGPCharacter::HandleJumpReleasedInput);
 }
 
 void AGPCharacter::ClearInputDelegateBindings()
 {
-	if (BoundInputManager == nullptr)
+	if (PlayerController == nullptr)
 	{
 		return;
 	}
 
-	BoundInputManager->OnMoveInput.RemoveAll(this);
-	BoundInputManager->OnLookInput.RemoveAll(this);
-	BoundInputManager->OnJumpInput.RemoveAll(this);
-	BoundInputManager->OnAttackInput.RemoveAll(this);
-	BoundInputManager = nullptr;
+	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
+	if (InputDelegates != nullptr)
+	{
+		InputDelegates->OnMoveInput.RemoveAll(this);
+		InputDelegates->OnLookInput.RemoveAll(this);
+		InputDelegates->OnJumpPressed.RemoveAll(this);
+		InputDelegates->OnJumpReleased.RemoveAll(this);
+	}
 }
 
 void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)
 {
-	AController* OwnerController = GetController();
-	if (OwnerController == nullptr)
+	if (PlayerController == nullptr)
 	{
 		return;
 	}
 
-	const FRotator ControlRotation = OwnerController->GetControlRotation();
+	const FRotator ControlRotation = PlayerController->GetControlRotation();
 	const FRotator YawRotation(0.0f, ControlRotation.Yaw, 0.0f);
 
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
@@ -125,7 +181,6 @@ void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)
 
 void AGPCharacter::HandleLookInput(const FVector2D& LookAxisVector)
 {
-	APlayerController* PlayerController = Cast<APlayerController>(GetController());
 	if (PlayerController == nullptr)
 	{
 		return;
@@ -135,21 +190,14 @@ void AGPCharacter::HandleLookInput(const FVector2D& LookAxisVector)
 	PlayerController->AddPitchInput(LookAxisVector.Y);
 }
 
-void AGPCharacter::HandleJumpInput()
+void AGPCharacter::HandleJumpPressedInput()
 {
 	Jump();
 }
 
-void AGPCharacter::HandleAttackInput()
+void AGPCharacter::HandleJumpReleasedInput()
 {
-	if (CombatComponent != nullptr)
-	{
-		UE_LOG(LogGPCharacter, Log, TEXT("Attack input received. Character=%s CombatComponent=%s"), *GetNameSafe(this), *GetNameSafe(CombatComponent));
-		CombatComponent->HandleAttackInput();
-	}
-	else
-	{
-		UE_LOG(LogGPCharacter, Warning, TEXT("Attack input ignored because CombatComponent is null. Character=%s"), *GetNameSafe(this));
-	}
+	StopJumping();
 }
+
 // End input delegate handlers

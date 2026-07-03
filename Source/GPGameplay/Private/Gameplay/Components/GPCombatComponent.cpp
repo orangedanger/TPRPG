@@ -2,8 +2,10 @@
 
 #include "CollisionShape.h"
 #include "DrawDebugHelpers.h"
+#include "Framework/Input/GFInputDelegates.h"
 #include "HAL/IConsoleManager.h"
 #include "Gameplay/Interfaces/DamageManagerInterface.h"
+#include "Gameplay/PlayerController/GPPlayerController.h"
 #include "GameFramework/Pawn.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGPCombatComponent, Log, All);
@@ -19,10 +21,74 @@ UGPCombatComponent::UGPCombatComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+void UGPCombatComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	InitializeInputDelegateBindings();
+}
+
+void UGPCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	ClearInputDelegateBindings();
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void UGPCombatComponent::HandleAttackInput()
 {
 	UE_LOG(LogGPCombatComponent, Log, TEXT("Attack requested. Owner=%s Damage=%.2f Range=%.2f Radius=%.2f"), *GetNameSafe(GetOwner()), BaseDamage, AttackRange, AttackSweepRadius);
 	PerformAttackSweep();
+}
+
+void UGPCombatComponent::InitializeInputDelegateBindings()
+{
+	ClearInputDelegateBindings();
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (OwnerPawn == nullptr)
+	{
+		return;
+	}
+
+	AGPPlayerController* PlayerController = Cast<AGPPlayerController>(OwnerPawn->GetController());
+	if (PlayerController == nullptr)
+	{
+		return;
+	}
+
+	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
+	if (InputDelegates == nullptr)
+	{
+		return;
+	}
+
+	BoundInputDelegatesOwner = PlayerController;
+	InputDelegates->OnAttackPressed.AddUObject(this, &UGPCombatComponent::HandleAttackPressedInput);
+}
+
+void UGPCombatComponent::ClearInputDelegateBindings()
+{
+	AGPPlayerController* PlayerController = BoundInputDelegatesOwner.Get();
+	if (PlayerController == nullptr)
+	{
+		BoundInputDelegatesOwner.Reset();
+		return;
+	}
+
+	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
+	if (InputDelegates != nullptr)
+	{
+		InputDelegates->OnAttackPressed.RemoveAll(this);
+		InputDelegates->OnAttackReleased.RemoveAll(this);
+	}
+
+	BoundInputDelegatesOwner.Reset();
+}
+
+void UGPCombatComponent::HandleAttackPressedInput()
+{
+	HandleAttackInput();
 }
 
 FVector UGPCombatComponent::GetAttackDirection() const
