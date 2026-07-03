@@ -11,9 +11,15 @@ DEFINE_LOG_CATEGORY_STATIC(LogGFInputManager, Log, All);
 void UInputManager::Initialize(AGFPlayerController* InOwner)
 {
 	OwnerController = InOwner;
-	RefreshLocalPlayerSubsystem();
+
+	if (OwnerController == nullptr)
+	{
+		UE_LOG(LogGFInputManager, Warning, TEXT("InputManager initialized without an owner controller. InputManager=%s"), *GetNameSafe(this));
+		return;
+	}
+
+	CacheLocalPlayerSubsystem();
 	ApplyMappingContexts();
-	BindConfiguredActions();
 }
 
 void UInputManager::SetInputComponent(UEnhancedInputComponent* InInputComponent)
@@ -22,42 +28,22 @@ void UInputManager::SetInputComponent(UEnhancedInputComponent* InInputComponent)
 	{
 		return;
 	}
-
-	ClearBindings();
+	
 	EnhancedInputComponent = InInputComponent;
 	BindConfiguredActions();
 }
 
-void UInputManager::RefreshLocalPlayerSubsystem()
-{
-	LocalPlayerSubsystem = nullptr;
-
-	if (OwnerController == nullptr)
-	{
-		UE_LOG(LogGFInputManager, Verbose, TEXT("Cannot refresh input subsystem without an owner controller."));
-		return;
-	}
-
-	ULocalPlayer* LocalPlayer = OwnerController->GetLocalPlayer();
-	if (LocalPlayer == nullptr)
-	{
-		UE_LOG(LogGFInputManager, Verbose, TEXT("Controller %s has no local player."), *GetNameSafe(OwnerController));
-		return;
-	}
-
-	LocalPlayerSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
-}
-
 void UInputManager::ApplyMappingContexts()
 {
-	if (LocalPlayerSubsystem == nullptr)
+	if (MappingContexts.IsEmpty())
 	{
-		RefreshLocalPlayerSubsystem();
+		UE_LOG(LogGFInputManager, Warning, TEXT("Input mapping contexts are not configured. InputManager=%s Controller=%s"), *GetNameSafe(this), *GetNameSafe(OwnerController));
+		return;
 	}
 
 	if (LocalPlayerSubsystem == nullptr)
 	{
-		UE_LOG(LogGFInputManager, Verbose, TEXT("Cannot apply mapping contexts without a local player subsystem."));
+		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot apply mapping contexts because LocalPlayerSubsystem is not initialized. InputManager=%s Controller=%s"), *GetNameSafe(this), *GetNameSafe(OwnerController));
 		return;
 	}
 
@@ -65,7 +51,7 @@ void UInputManager::ApplyMappingContexts()
 	{
 		if (Config.MappingContext == nullptr)
 		{
-			UE_LOG(LogGFInputManager, Warning, TEXT("Cannot add a null input mapping context."));
+			UE_LOG(LogGFInputManager, Warning, TEXT("Cannot add a null input mapping context. InputManager=%s"), *GetNameSafe(this));
 			continue;
 		}
 
@@ -81,19 +67,23 @@ void UInputManager::ApplyMappingContexts()
 
 void UInputManager::ClearMappingContexts()
 {
-	if (LocalPlayerSubsystem == nullptr)
+	if (ActiveMappingContexts.IsEmpty())
 	{
-		RefreshLocalPlayerSubsystem();
+		return;
 	}
 
-	if (LocalPlayerSubsystem)
+	if (LocalPlayerSubsystem == nullptr)
 	{
-		for (UInputMappingContext* MappingContext : ActiveMappingContexts)
+		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot clear mapping contexts because LocalPlayerSubsystem is not initialized. InputManager=%s Controller=%s"), *GetNameSafe(this), *GetNameSafe(OwnerController));
+		ActiveMappingContexts.Reset();
+		return;
+	}
+
+	for (UInputMappingContext* MappingContext : ActiveMappingContexts)
+	{
+		if (MappingContext != nullptr)
 		{
-			if (MappingContext != nullptr)
-			{
-				LocalPlayerSubsystem->RemoveMappingContext(MappingContext);
-			}
+			LocalPlayerSubsystem->RemoveMappingContext(MappingContext);
 		}
 	}
 
@@ -102,17 +92,29 @@ void UInputManager::ClearMappingContexts()
 
 void UInputManager::BindConfiguredActions()
 {
-	ClearBindings();
+	ClearActionBindings();
 	BindingRecords.Reset();
+
+	if (EnhancedInputComponent == nullptr)
+	{
+		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot bind input actions without an EnhancedInputComponent. InputManager=%s Controller=%s"), *GetNameSafe(this), *GetNameSafe(OwnerController));
+		return;
+	}
 
 	if (InputActionTable == nullptr)
 	{
-		UE_LOG(LogGFInputManager, Verbose, TEXT("Input action table is not configured."));
+		UE_LOG(LogGFInputManager, Warning, TEXT("Input action table is not configured. InputManager=%s Controller=%s"), *GetNameSafe(this), *GetNameSafe(OwnerController));
 		return;
 	}
 
 	TArray<FInputActionTableRow*> Rows;
 	InputActionTable->GetAllRows(TEXT("InputManager.BindConfiguredActions"), Rows);
+
+	if (Rows.IsEmpty())
+	{
+		UE_LOG(LogGFInputManager, Warning, TEXT("Input action table has no rows. InputManager=%s Table=%s"), *GetNameSafe(this), *GetNameSafe(InputActionTable));
+		return;
+	}
 
 	for (const FInputActionTableRow* Row : Rows)
 	{
@@ -120,50 +122,6 @@ void UInputManager::BindConfiguredActions()
 		{
 			AddConfiguredBindingRecord(*Row);
 		}
-	}
-}
-
-void UInputManager::DisableInputGroup(EInputGroup InputGroup)
-{
-	if (InputGroup == EInputGroup::None)
-	{
-		return;
-	}
-
-	DisabledGroups.Add(InputGroup);
-
-	for (FInputActionBindingRecord& Record : BindingRecords)
-	{
-		if (Record.InputGroup == InputGroup)
-		{
-			UnbindRecord(Record);
-		}
-	}
-}
-
-void UInputManager::EnableInputGroup(EInputGroup InputGroup)
-{
-	if (InputGroup == EInputGroup::None)
-	{
-		return;
-	}
-
-	DisabledGroups.Remove(InputGroup);
-
-	for (FInputActionBindingRecord& Record : BindingRecords)
-	{
-		if (Record.InputGroup == InputGroup)
-		{
-			BindRecord(Record);
-		}
-	}
-}
-
-void UInputManager::ClearBindings()
-{
-	for (FInputActionBindingRecord& Record : BindingRecords)
-	{
-		UnbindRecord(Record);
 	}
 }
 
@@ -187,11 +145,35 @@ void UInputManager::HandleAttackInput(const FInputActionValue&)
 	OnAttackInput.Broadcast();
 }
 
+void UInputManager::CacheLocalPlayerSubsystem()
+{
+	LocalPlayerSubsystem = nullptr;
+
+	if (OwnerController == nullptr)
+	{
+		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot cache input subsystem without an owner controller. InputManager=%s"), *GetNameSafe(this));
+		return;
+	}
+
+	ULocalPlayer* LocalPlayer = OwnerController->GetLocalPlayer();
+	if (LocalPlayer == nullptr)
+	{
+		UE_LOG(LogGFInputManager, Warning, TEXT("Controller %s has no local player, cannot configure Enhanced Input subsystem."), *GetNameSafe(OwnerController));
+		return;
+	}
+
+	LocalPlayerSubsystem = LocalPlayer->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
+	if (LocalPlayerSubsystem == nullptr)
+	{
+		UE_LOG(LogGFInputManager, Warning, TEXT("Enhanced Input local player subsystem is missing. Controller=%s"), *GetNameSafe(OwnerController));
+	}
+}
+
 void UInputManager::AddConfiguredBindingRecord(const FInputActionTableRow& Row)
 {
 	if (Row.InputAction == nullptr)
 	{
-		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot bind a null input action."));
+		UE_LOG(LogGFInputManager, Warning, TEXT("Cannot bind a null input action. InputManager=%s"), *GetNameSafe(this));
 		return;
 	}
 
@@ -199,31 +181,23 @@ void UInputManager::AddConfiguredBindingRecord(const FInputActionTableRow& Row)
 	Record.ActionType = Row.ActionType;
 	Record.InputAction = Row.InputAction;
 	Record.TriggerEvent = Row.TriggerEvent;
-	Record.InputGroup = Row.InputGroup;
 
 	for (FInputActionBindingRecord& ExistingRecord : BindingRecords)
 	{
 		if (ExistingRecord.ActionType == Record.ActionType &&
 			ExistingRecord.InputAction == Record.InputAction &&
-			ExistingRecord.TriggerEvent == Record.TriggerEvent &&
-			ExistingRecord.InputGroup == Record.InputGroup)
+			ExistingRecord.TriggerEvent == Record.TriggerEvent)
 		{
+			Warning
 			UnbindRecord(ExistingRecord);
 			ExistingRecord = Record;
-
-			if (!DisabledGroups.Contains(ExistingRecord.InputGroup))
-			{
-				BindRecord(ExistingRecord);
-			}
+			BindRecord(ExistingRecord);
 			return;
 		}
 	}
 
 	FInputActionBindingRecord& NewRecord = BindingRecords.Add_GetRef(Record);
-	if (!DisabledGroups.Contains(NewRecord.InputGroup))
-	{
-		BindRecord(NewRecord);
-	}
+	BindRecord(NewRecord);
 }
 
 void UInputManager::BindRecord(FInputActionBindingRecord& Record)
@@ -262,6 +236,7 @@ void UInputManager::BindRecord(FInputActionBindingRecord& Record)
 		break;
 	case EInputActionType::None:
 	default:
+		UE_LOG(LogGFInputManager, Warning, TEXT("Unsupported input action type. InputManager=%s Action=%s"), *GetNameSafe(this), *GetNameSafe(Record.InputAction));
 		break;
 	}
 
@@ -286,6 +261,14 @@ void UInputManager::UnbindRecord(FInputActionBindingRecord& Record)
 	EnhancedInputComponent->RemoveBindingByHandle(Record.BindingHandle);
 	Record.BindingHandle = 0;
 	Record.bIsBound = false;
+}
+
+void UInputManager::ClearActionBindings()
+{
+	for (FInputActionBindingRecord& Record : BindingRecords)
+	{
+		UnbindRecord(Record);
+	}
 }
 
 bool UInputManager::CanBindRecord(const FInputActionBindingRecord& Record) const

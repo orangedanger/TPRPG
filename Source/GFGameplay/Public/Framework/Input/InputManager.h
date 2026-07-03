@@ -23,16 +23,13 @@ class GFGAMEPLAY_API UInputManager : public UObject
 	GENERATED_BODY()
 
 public:
-	/** 使用所属 PlayerController 初始化输入管理器。 */
+	/** 设置所属 PlayerController，缓存本地玩家输入子系统，并应用配置的 MappingContext。 */
 	void Initialize(AGFPlayerController* InOwner);
 
-	/** 设置接收 Action 绑定的 Enhanced Input 组件。 */
+	/** 设置接收 Action 绑定的 Enhanced Input 组件，随后绑定 DataTable 中配置的 Action。 */
 	void SetInputComponent(UEnhancedInputComponent* InInputComponent);
 
-	/** 刷新用于添加 MappingContext 的本地玩家输入子系统。 */
-	void RefreshLocalPlayerSubsystem();
-
-	/** 将配置的 MappingContext 添加到本地玩家的 Enhanced Input 子系统。 */
+	/** 将配置的 MappingContext 添加到初始化时缓存的 Enhanced Input 子系统。 */
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void ApplyMappingContexts();
 
@@ -43,18 +40,6 @@ public:
 	/** 从配置的 DataTable 重建 Action 绑定。 */
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void BindConfiguredActions();
-
-	/** 禁用指定分组下所有当前已绑定的 Action。 */
-	UFUNCTION(BlueprintCallable, Category = "Input")
-	void DisableInputGroup(EInputGroup InputGroup);
-
-	/** 启用指定分组下所有已配置的 Action。 */
-	UFUNCTION(BlueprintCallable, Category = "Input")
-	void EnableInputGroup(EInputGroup InputGroup);
-
-	/** 移除所有当前生效的 Action 绑定，但保留运行时记录。 */
-	UFUNCTION(BlueprintCallable, Category = "Input")
-	void ClearBindings();
 
 	/** Move 输入被触发时广播，订阅者应属于同一个 PlayerController 输入上下文。 */
 	FOnMoveInput OnMoveInput;
@@ -69,7 +54,7 @@ public:
 	FOnAttackInput OnAttackInput;
 
 protected:
-	/** 由输入管理器持有并在初始化时应用的 MappingContext 配置。 */
+	/** 由输入管理器持有并在 Initialize 时应用的 MappingContext 配置。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	TArray<FInputMappingContextConfig> MappingContexts;
 
@@ -97,7 +82,7 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UEnhancedInputComponent> EnhancedInputComponent = nullptr;
 
-	/** 用于添加和移除 MappingContext 的本地玩家输入子系统。 */
+	/** 初始化时缓存的本地玩家输入子系统，后续函数只消费该状态，不自行重复刷新。 */
 	UPROPERTY(Transient)
 	TObjectPtr<UEnhancedInputLocalPlayerSubsystem> LocalPlayerSubsystem = nullptr;
 
@@ -108,12 +93,11 @@ protected:
 	/** 从 DataTable 加载并绑定到 Enhanced Input 的运行时记录。 */
 	TArray<FInputActionBindingRecord> BindingRecords;
 
-	/** 当前被玩法状态禁用的输入分组。 */
-	TSet<EInputGroup> DisabledGroups;
-
 private:
+	void CacheLocalPlayerSubsystem();
 	void AddConfiguredBindingRecord(const FInputActionTableRow& Row);
 	void BindRecord(FInputActionBindingRecord& Record);
 	void UnbindRecord(FInputActionBindingRecord& Record);
+	void ClearActionBindings();
 	bool CanBindRecord(const FInputActionBindingRecord& Record) const;
 };

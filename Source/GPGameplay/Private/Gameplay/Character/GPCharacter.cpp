@@ -18,25 +18,16 @@ void AGPCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	RefreshInputBinding();
+	InitializeInputDelegateBindings();
 }
 
 void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	ClearInputBinding();
+	ClearInputDelegateBindings();
 
 	Super::EndPlay(EndPlayReason);
 }
 // End AActor interface
-
-// Begin APawn interface
-void AGPCharacter::PossessedBy(AController* NewController)
-{
-	Super::PossessedBy(NewController);
-
-	RefreshInputBinding();
-}
-// End APawn interface
 
 /**
  * IDamageManagerInterface Begin
@@ -77,9 +68,9 @@ void AGPCharacter::TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, fl
  */
 
 // Begin input delegate handlers
-void AGPCharacter::RefreshInputBinding()
+void AGPCharacter::InitializeInputDelegateBindings()
 {
-	ClearInputBinding();
+	ClearInputDelegateBindings();
 
 	AGFPlayerController* PlayerController = Cast<AGFPlayerController>(GetController());
 	if (PlayerController == nullptr)
@@ -100,7 +91,7 @@ void AGPCharacter::RefreshInputBinding()
 	BoundInputManager->OnAttackInput.AddUObject(this, &AGPCharacter::HandleAttackInput);
 }
 
-void AGPCharacter::ClearInputBinding()
+void AGPCharacter::ClearInputDelegateBindings()
 {
 	if (BoundInputManager == nullptr)
 	{

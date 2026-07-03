@@ -38,7 +38,6 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void PossessedBy(AController* NewController) override;
 
 	/** 角色生命值和死亡状态的最小属性组件。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Attribute")
@@ -49,11 +48,11 @@ protected:
 	TObjectPtr<UGPCombatComponent> CombatComponent;
 
 private:
-	/** 绑定当前控制器上的输入管理器委托，适用于 BeginPlay 和 Possess 后刷新。 */
-	void RefreshInputBinding();
+	/** 初始化当前控制器上的输入管理器委托绑定，当前 Demo 只在 BeginPlay 执行一次。 */
+	void InitializeInputDelegateBindings();
 
-	/** 清理输入委托绑定，避免控制器切换或销毁后留下悬挂回调。 */
-	void ClearInputBinding();
+	/** 清理输入委托绑定，避免销毁后留下悬挂回调。 */
+	void ClearInputDelegateBindings();
 
 	/** 响应移动输入委托，按控制器 Yaw 将二维输入转换为世界移动。 */
 	void HandleMoveInput(const FVector2D& MovementVector);
@@ -67,7 +66,7 @@ private:
 	/** 响应攻击输入委托，并把战斗行为转交给 CombatComponent。 */
 	void HandleAttackInput();
 
-	/** 当前已经绑定过的输入管理器，用于控制器切换或销毁时从正确实例清理回调。 */
+	/** 当前已经绑定过的输入管理器，用于销毁时从正确实例清理回调。 */
 	UPROPERTY(Transient)
 	TObjectPtr<UInputManager> BoundInputManager = nullptr;
 
