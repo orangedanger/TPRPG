@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Engine/EngineTypes.h"
+#include "Gameplay/Data/GPSkillData.h"
 #include "GPCombatComponent.generated.h"
 
 class AGPPlayerController;
@@ -33,6 +34,10 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GP|Combat", meta = (ClampMin = "0.0"))
 	float BaseDamage = 10.0f;
 
+	/** 普通攻击技能行，配置后优先使用 DataTable 中的数值；未配置时回退到本组件默认数值。 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GP|Combat")
+	FDataTableRowHandle BasicAttackRow;
+
 	/** 从角色位置朝鼠标方向检测的最大距离。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GP|Combat", meta = (ClampMin = "0.0"))
 	float AttackRange = 300.0f;
@@ -55,6 +60,9 @@ private:
 	/** 响应攻击按下输入委托。 */
 	void HandleAttackPressedInput();
 
+	/** 解析普通攻击配置；DataTable 未配置或行无效时使用组件上的 fallback 数值。 */
+	void ResolveBasicAttackConfig(float& OutDamage, float& OutRange, float& OutSweepRadius, float& OutCooldown, FName& OutSkillId) const;
+
 	/** 根据玩家控制器和鼠标位置计算攻击方向，失败时回退到 Owner 朝向。 */
 	FVector GetAttackDirection() const;
 
@@ -62,7 +70,7 @@ private:
 	void PerformAttackSweep();
 
 	/** 当 Debug CVar 开启时绘制攻击 Sweep 的调试图形。 */
-	void DrawAttackDebug(const FVector& Start, const FVector& End, const FHitResult& HitResult, bool bHit) const;
+	void DrawAttackDebug(const FVector& Start, const FVector& End, float SweepRadius, const FHitResult& HitResult, bool bHit) const;
 
 	/** 当前已经绑定过输入委托的控制器，用于销毁时从正确实例清理回调。 */
 	UPROPERTY(Transient)

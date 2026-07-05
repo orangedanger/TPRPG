@@ -1,0 +1,2 @@
+---,SkillId,Damage,Range,Cooldown,SweepRadius
+BasicAttack,BasicAttack,10.0,300.0,0.5,50.0
