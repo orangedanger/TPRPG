@@ -24,6 +24,18 @@ void UGFInputManager::Initialize(AGFPlayerController* InOwner)
 	ApplyMappingContexts();
 }
 
+void UGFInputManager::Deinitialize()
+{
+	ClearActionBindings();
+	BindingRecords.Reset();
+	PendingInputTags.Reset();
+	ClearMappingContexts();
+
+	EnhancedInputComponent = nullptr;
+	LocalPlayerSubsystem = nullptr;
+	OwnerController = nullptr;
+}
+
 void UGFInputManager::SetInputComponent(UEnhancedInputComponent* InInputComponent)
 {
 	if (EnhancedInputComponent == InInputComponent)

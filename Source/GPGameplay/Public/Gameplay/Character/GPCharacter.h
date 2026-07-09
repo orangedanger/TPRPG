@@ -11,7 +11,7 @@ class AGPPlayerController;
 
 /**
  * 项目默认角色，负责组合属性与战斗组件，并作为当前 Demo 的输入响应者、伤害发起者和伤害接收者。
- * 角色通过当前 PlayerController 持有的输入委托对象订阅基础角色输入，攻击输入由战斗组件自行订阅。
+ * 角色通过当前 PlayerController 持有的输入委托对象订阅输入，并把攻击输入转发给战斗组件。
  */
 UCLASS(Blueprintable)
 class GPGAMEPLAY_API AGPCharacter : public AGFCharacter, public IDamageManagerInterface
@@ -36,8 +36,20 @@ public:
 	 */
 
 protected:
+	/** BeginPlay 时只初始化属性委托；输入绑定由 Possess 或 Controller 复制驱动。 */
 	virtual void BeginPlay() override;
+
+	/** EndPlay 时清理属性和输入委托，避免对象销毁后继续收到广播。 */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** 服务端 Possess 后重建角色和战斗组件输入委托绑定。 */
+	virtual void PossessedBy(AController* NewController) override;
+
+	/** 服务端 UnPossess 前清理当前控制器上的输入委托绑定。 */
+	virtual void UnPossessed() override;
+
+	/** 客户端收到 Controller 复制后重建输入委托绑定。 */
+	virtual void OnRep_Controller() override;
 
 	/** 角色生命值和死亡状态的最小属性组件。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Attribute")
@@ -54,11 +66,14 @@ private:
 	/** 清理属性组件委托绑定，避免销毁后继续收到组件广播。 */
 	void ClearAttributeDelegateBindings();
 
-	/** 初始化当前控制器输入委托对象上的绑定，当前 Demo 只在 BeginPlay 执行一次。 */
-	void InitializeInputDelegateBindings();
+	/** 绑定当前控制器输入委托；若已经绑定到同一控制器则直接返回。 */
+	void BindInputDelegateBindings();
 
-	/** 清理输入委托绑定，避免销毁后留下悬挂回调。 */
+	/** 从实际绑定过的控制器上清理输入委托，避免控制器缓存变化后清错对象。 */
 	void ClearInputDelegateBindings();
+
+	/** 死亡后屏蔽移动、跳跃和攻击等 gameplay 输入。 */
+	bool IsCharacterDead() const;
 
 	/** 响应移动输入委托，按控制器 Yaw 将二维输入转换为世界移动。 */
 	void HandleMoveInput(const FVector2D& MovementVector);
@@ -72,6 +87,9 @@ private:
 	/** 响应跳跃松开输入委托。 */
 	void HandleJumpReleasedInput();
 
+	/** 响应攻击按下输入委托，并把攻击请求转交给战斗组件。 */
+	void HandleAttackPressedInput();
+
 	/** 响应属性组件死亡广播，当前只触发角色本地死亡表现。 */
 	UFUNCTION()
 	void HandleAttributeOwnerDead(AActor* DeadActor);
@@ -79,4 +97,8 @@ private:
 	// TODO: 临时死亡效果
 	/** 让 Mesh 进入布娃娃并关闭 Capsule 碰撞，后续正式死亡流程会替换这里。 */
 	void ApplyDeathRagdoll();
+
+	/** 当前已经绑定过输入委托的控制器，用于只在控制器变化时清理和重绑。 */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<AGPPlayerController> PlayerController;
 };

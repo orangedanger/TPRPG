@@ -1,11 +1,12 @@
 #include "Gameplay/Character/GPCharacter.h"
 
 #include "Framework/Input/GFInputDelegates.h"
-#include "Gameplay/PlayerController/GPPlayerController.h"
 #include "Gameplay/Components/GPAttributeSetComponent.h"
 #include "Gameplay/Components/GPCombatComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Gameplay/PlayerController/GPPlayerController.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGPCharacter, Log, All);
 
@@ -21,7 +22,6 @@ void AGPCharacter::BeginPlay()
 	Super::BeginPlay();
 	
 	InitializeAttributeDelegateBindings();
-	InitializeInputDelegateBindings();
 }
 
 void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -31,6 +31,27 @@ void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	Super::EndPlay(EndPlayReason);
 }
+
+void AGPCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	BindInputDelegateBindings();
+}
+
+void AGPCharacter::UnPossessed()
+{
+	ClearInputDelegateBindings();
+
+	Super::UnPossessed();
+}
+
+void AGPCharacter::OnRep_Controller()
+{
+	Super::OnRep_Controller();
+
+	BindInputDelegateBindings();
+}
 // End AActor interface
 
 /**
@@ -38,6 +59,18 @@ void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
  */
 void AGPCharacter::MakeDamage(AActor* TargetActor, float DamageAmount, const FHitResult& HitResult)
 {
+	if (HasAuthority() == false)
+	{
+		UE_LOG(LogGPCharacter, Warning, TEXT("MakeDamage skipped on non-authority. Instigator=%s Target=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(TargetActor), DamageAmount);
+		return;
+	}
+
+	if (IsCharacterDead())
+	{
+		UE_LOG(LogGPCharacter, Warning, TEXT("MakeDamage skipped because instigator is dead. Instigator=%s Target=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(TargetActor), DamageAmount);
+		return;
+	}
+
 	if (TargetActor == nullptr || TargetActor == this)
 	{
 		UE_LOG(LogGPCharacter, Warning, TEXT("MakeDamage skipped. Instigator=%s Target=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(TargetActor), DamageAmount);
@@ -57,9 +90,27 @@ void AGPCharacter::MakeDamage(AActor* TargetActor, float DamageAmount, const FHi
 
 void AGPCharacter::TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, float DamageAmount, const FHitResult& HitResult)
 {
+	if (HasAuthority() == false)
+	{
+		UE_LOG(LogGPCharacter, Warning, TEXT("TakeDamage skipped on non-authority. Receiver=%s Instigator=%s Causer=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), *GetNameSafe(DamageCauser), DamageAmount);
+		return;
+	}
+
 	if (AttributeSetComponent == nullptr)
 	{
 		UE_LOG(LogGPCharacter, Warning, TEXT("TakeDamage skipped because AttributeSetComponent is null. Receiver=%s Instigator=%s Causer=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), *GetNameSafe(DamageCauser), DamageAmount);
+		return;
+	}
+
+	if (AttributeSetComponent->IsDead())
+	{
+		UE_LOG(LogGPCharacter, Log, TEXT("TakeDamage skipped because receiver is already dead. Receiver=%s Instigator=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), DamageAmount);
+		return;
+	}
+
+	if (DamageAmount <= 0.0f)
+	{
+		UE_LOG(LogGPCharacter, Warning, TEXT("TakeDamage skipped because damage is invalid. Receiver=%s Instigator=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), DamageAmount);
 		return;
 	}
 
@@ -105,6 +156,15 @@ void AGPCharacter::HandleAttributeOwnerDead(AActor* DeadActor)
 // TODO: 临时死亡效果
 void AGPCharacter::ApplyDeathRagdoll()
 {
+	ClearInputDelegateBindings();
+
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (MovementComponent != nullptr)
+	{
+		MovementComponent->StopMovementImmediately();
+		MovementComponent->DisableMovement();
+	}
+
 	UCapsuleComponent* OwnerCapsule = GetCapsuleComponent();
 	if (OwnerCapsule != nullptr)
 	{
@@ -124,16 +184,35 @@ void AGPCharacter::ApplyDeathRagdoll()
 // End attribute delegate handlers
 
 // Begin input delegate handlers
-void AGPCharacter::InitializeInputDelegateBindings()
+void AGPCharacter::BindInputDelegateBindings()
 {
-	ClearInputDelegateBindings();
+	if (IsCharacterDead())
+	{
+		ClearInputDelegateBindings();
+		return;
+	}
 	
-	if (PlayerController == nullptr)
+	AGPPlayerController* CurrentPlayerController = Cast<AGPPlayerController>(Controller);
+	if (CurrentPlayerController == nullptr)
+	{
+		ClearInputDelegateBindings();
+		return;
+	}
+
+	if (CurrentPlayerController->IsLocalController() == false)
+	{
+		ClearInputDelegateBindings();
+		return;
+	}
+
+	if (PlayerController.Get() == CurrentPlayerController)
 	{
 		return;
 	}
 
-	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
+	ClearInputDelegateBindings();
+
+	FGFInputDelegates* InputDelegates = CurrentPlayerController->GetInputDelegates();
 	if (InputDelegates == nullptr)
 	{
 		return;
@@ -143,28 +222,41 @@ void AGPCharacter::InitializeInputDelegateBindings()
 	InputDelegates->OnLookInput.AddUObject(this, &AGPCharacter::HandleLookInput);
 	InputDelegates->OnJumpPressed.AddUObject(this, &AGPCharacter::HandleJumpPressedInput);
 	InputDelegates->OnJumpReleased.AddUObject(this, &AGPCharacter::HandleJumpReleasedInput);
+	InputDelegates->OnAttackPressed.AddUObject(this, &AGPCharacter::HandleAttackPressedInput);
+	PlayerController = CurrentPlayerController;
 }
 
 void AGPCharacter::ClearInputDelegateBindings()
 {
-	if (PlayerController == nullptr)
+	AGPPlayerController* BoundPlayerController = PlayerController.Get();
+	if (BoundPlayerController == nullptr)
 	{
+		PlayerController.Reset();
 		return;
 	}
 
-	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
+	FGFInputDelegates* InputDelegates = BoundPlayerController->GetInputDelegates();
 	if (InputDelegates != nullptr)
 	{
 		InputDelegates->OnMoveInput.RemoveAll(this);
 		InputDelegates->OnLookInput.RemoveAll(this);
 		InputDelegates->OnJumpPressed.RemoveAll(this);
 		InputDelegates->OnJumpReleased.RemoveAll(this);
+		InputDelegates->OnAttackPressed.RemoveAll(this);
+		InputDelegates->OnAttackReleased.RemoveAll(this);
 	}
+
+	PlayerController.Reset();
+}
+
+bool AGPCharacter::IsCharacterDead() const
+{
+	return AttributeSetComponent != nullptr && AttributeSetComponent->IsDead();
 }
 
 void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)
 {
-	if (PlayerController == nullptr)
+	if (PlayerController == nullptr || IsCharacterDead())
 	{
 		return;
 	}
@@ -181,7 +273,7 @@ void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)
 
 void AGPCharacter::HandleLookInput(const FVector2D& LookAxisVector)
 {
-	if (PlayerController == nullptr)
+	if (PlayerController == nullptr || IsCharacterDead())
 	{
 		return;
 	}
@@ -192,12 +284,32 @@ void AGPCharacter::HandleLookInput(const FVector2D& LookAxisVector)
 
 void AGPCharacter::HandleJumpPressedInput()
 {
+	if (IsCharacterDead())
+	{
+		return;
+	}
+
 	Jump();
 }
 
 void AGPCharacter::HandleJumpReleasedInput()
 {
+	if (IsCharacterDead())
+	{
+		return;
+	}
+
 	StopJumping();
+}
+
+void AGPCharacter::HandleAttackPressedInput()
+{
+	if (IsCharacterDead() || CombatComponent == nullptr)
+	{
+		return;
+	}
+
+	CombatComponent->HandleAttackInput();
 }
 
 // End input delegate handlers

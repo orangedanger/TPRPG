@@ -18,6 +18,20 @@ void AGFPlayerController::BeginPlay()
 	InitializeInput();
 }
 
+void AGFPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (InputManager != nullptr)
+	{
+		InputManager->Deinitialize();
+		InputManager = nullptr;
+	}
+
+	ConfiguredEnhancedInputComponent = nullptr;
+	bInputInitialized = false;
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void AGFPlayerController::SetupInputComponent()
 {
 	Super::SetupInputComponent();

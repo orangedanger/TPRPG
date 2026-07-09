@@ -36,12 +36,19 @@ AGFCharacter::AGFCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 }
 
-void AGFCharacter::BeginPlay()
+void AGFCharacter::PossessedBy(AController* NewController)
 {
-	Super::BeginPlay();
-	
-	// 当前 Demo 在 BeginPlay 缓存一次控制器，派生类后续通过该指针访问输入委托。
-	PlayerController = Cast<AGFPlayerController>(GetController());
+	Super::PossessedBy(NewController);
+}
+
+void AGFCharacter::UnPossessed()
+{
+	Super::UnPossessed();
+}
+
+void AGFCharacter::OnRep_Controller()
+{
+	Super::OnRep_Controller();
 }
 
 USpringArmComponent* AGFCharacter::GetCameraBoom() const

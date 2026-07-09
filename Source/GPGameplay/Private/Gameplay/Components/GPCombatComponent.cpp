@@ -2,11 +2,11 @@
 
 #include "CollisionShape.h"
 #include "DrawDebugHelpers.h"
-#include "Framework/Input/GFInputDelegates.h"
 #include "HAL/IConsoleManager.h"
+#include "Gameplay/Components/GPAttributeSetComponent.h"
 #include "Gameplay/Interfaces/DamageManagerInterface.h"
-#include "Gameplay/PlayerController/GPPlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogGPCombatComponent, Log, All);
 
@@ -19,75 +19,25 @@ static TAutoConsoleVariable<int32> CVarGPCombatDrawAttackDebug(
 UGPCombatComponent::UGPCombatComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
-}
-
-void UGPCombatComponent::BeginPlay()
-{
-	Super::BeginPlay();
-
-	InitializeInputDelegateBindings();
-}
-
-void UGPCombatComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	ClearInputDelegateBindings();
-
-	Super::EndPlay(EndPlayReason);
+	SetIsReplicatedByDefault(true);
 }
 
 void UGPCombatComponent::HandleAttackInput()
 {
-	PerformAttackSweep();
-}
-
-void UGPCombatComponent::InitializeInputDelegateBindings()
-{
-	ClearInputDelegateBindings();
-
-	APawn* OwnerPawn = Cast<APawn>(GetOwner());
-	if (OwnerPawn == nullptr)
+	if (IsOwnerDead())
 	{
+		UE_LOG(LogGPCombatComponent, Log, TEXT("Attack ignored because owner is dead. Owner=%s"), *GetNameSafe(GetOwner()));
 		return;
 	}
 
-	AGPPlayerController* PlayerController = Cast<AGPPlayerController>(OwnerPawn->GetController());
-	if (PlayerController == nullptr)
+	const AActor* OwnerActor = GetOwner();
+	if (OwnerActor != nullptr && OwnerActor->HasAuthority())
 	{
+		PerformAttackSweep();
 		return;
 	}
 
-	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
-	if (InputDelegates == nullptr)
-	{
-		return;
-	}
-
-	BoundInputDelegatesOwner = PlayerController;
-	InputDelegates->OnAttackPressed.AddUObject(this, &UGPCombatComponent::HandleAttackPressedInput);
-}
-
-void UGPCombatComponent::ClearInputDelegateBindings()
-{
-	AGPPlayerController* PlayerController = BoundInputDelegatesOwner.Get();
-	if (PlayerController == nullptr)
-	{
-		BoundInputDelegatesOwner.Reset();
-		return;
-	}
-
-	FGFInputDelegates* InputDelegates = PlayerController->GetInputDelegates();
-	if (InputDelegates != nullptr)
-	{
-		InputDelegates->OnAttackPressed.RemoveAll(this);
-		InputDelegates->OnAttackReleased.RemoveAll(this);
-	}
-
-	BoundInputDelegatesOwner.Reset();
-}
-
-void UGPCombatComponent::HandleAttackPressedInput()
-{
-	HandleAttackInput();
+	ServerHandleAttackInput();
 }
 
 void UGPCombatComponent::ResolveBasicAttackConfig(float& OutDamage, float& OutRange, float& OutSweepRadius, float& OutCooldown, FName& OutSkillId) const
@@ -130,11 +80,22 @@ FVector UGPCombatComponent::GetAttackDirection() const
 		return MouseWorldDirection.GetSafeNormal();
 	}
 
+	if (PlayerController != nullptr)
+	{
+		return PlayerController->GetControlRotation().Vector().GetSafeNormal();
+	}
+
 	return OwnerActor != nullptr ? OwnerActor->GetActorForwardVector() : FVector::ForwardVector;
 }
 
 void UGPCombatComponent::PerformAttackSweep()
 {
+	if (IsOwnerDead())
+	{
+		UE_LOG(LogGPCombatComponent, Log, TEXT("Attack sweep skipped because owner is dead. Owner=%s"), *GetNameSafe(GetOwner()));
+		return;
+	}
+
 	float ResolvedDamage = BaseDamage;
 	float ResolvedRange = AttackRange;
 	float ResolvedSweepRadius = AttackSweepRadius;
@@ -152,7 +113,9 @@ void UGPCombatComponent::PerformAttackSweep()
 	}
 
 	const FVector Start = OwnerActor->GetActorLocation();
-	const FVector End = Start + GetAttackDirection() * ResolvedRange;
+	const FVector AttackDirection = GetAttackDirection();
+	const FVector SafeAttackDirection = AttackDirection.IsNearlyZero() ? OwnerActor->GetActorForwardVector() : AttackDirection.GetSafeNormal();
+	const FVector End = Start + SafeAttackDirection * ResolvedRange;
 	const FCollisionShape SweepShape = FCollisionShape::MakeSphere(ResolvedSweepRadius);
 	UE_LOG(LogGPCombatComponent, Log, TEXT("Attack sweep started. Owner=%s SkillId=%s Start=%s End=%s Radius=%.2f Channel=%d"), *GetNameSafe(OwnerActor), *ResolvedSkillId.ToString(), *Start.ToString(), *End.ToString(), ResolvedSweepRadius, static_cast<int32>(AttackTraceChannel.GetValue()));
 
@@ -191,6 +154,16 @@ void UGPCombatComponent::PerformAttackSweep()
 	DamageMaker->MakeDamage(HitActor, ResolvedDamage, HitResult);
 }
 
+void UGPCombatComponent::ServerHandleAttackInput_Implementation()
+{
+	PerformAttackSweep();
+}
+
+bool UGPCombatComponent::ServerHandleAttackInput_Validate()
+{
+	return true;
+}
+
 void UGPCombatComponent::DrawAttackDebug(const FVector& Start, const FVector& End, float SweepRadius, const FHitResult& HitResult, bool bHit) const
 {
 #if ENABLE_DRAW_DEBUG
@@ -209,4 +182,16 @@ void UGPCombatComponent::DrawAttackDebug(const FVector& Start, const FVector& En
 	DrawDebugLine(World, Start, End, DebugColor, false, 1.0f, 0, 2.0f);
 	DrawDebugSphere(World, bHit ? HitResult.ImpactPoint : End, SweepRadius, 16, DebugColor, false, 1.0f);
 #endif
+}
+
+bool UGPCombatComponent::IsOwnerDead() const
+{
+	const AActor* OwnerActor = GetOwner();
+	if (OwnerActor == nullptr)
+	{
+		return true;
+	}
+
+	const UGPAttributeSetComponent* AttributeSet = OwnerActor->FindComponentByClass<UGPAttributeSetComponent>();
+	return AttributeSet != nullptr && AttributeSet->IsDead();
 }

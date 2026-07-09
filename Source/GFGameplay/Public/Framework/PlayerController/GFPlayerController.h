@@ -30,6 +30,9 @@ protected:
 	/** BeginPlay 时确保本地输入委托对象和输入管理器已经创建。 */
 	virtual void BeginPlay() override;
 
+	/** EndPlay 时移除本控制器添加的 Enhanced Input 上下文和动作绑定。 */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	/** 在引擎创建 InputComponent 后直接交给输入管理器执行 Enhanced Input 绑定。 */
 	virtual void SetupInputComponent() override;
 

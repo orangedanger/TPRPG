@@ -37,6 +37,9 @@ public:
 	/** 设置所属 PlayerController，缓存本地玩家输入子系统，并应用配置的 MappingContext。 */
 	virtual void Initialize(AGFPlayerController* InOwner);
 
+	/** 清理由输入管理器添加的上下文和动作绑定，通常在 PlayerController 结束生命周期时调用。 */
+	virtual void Deinitialize();
+
 	/** 设置接收 Action 绑定的 Enhanced Input 组件，随后绑定 DataTable 中配置的 Action。 */
 	virtual void SetInputComponent(UEnhancedInputComponent* InInputComponent);
 

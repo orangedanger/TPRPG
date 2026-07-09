@@ -17,7 +17,7 @@ class GPGAMEPLAY_API UGPAttributeSetComponent : public UActorComponent
 public:
 	UGPAttributeSetComponent();
 
-	/** 设置当前生命值，并同步死亡状态。 */
+	/** 设置当前生命值，并同步死亡状态；运行时应只在服务器权威侧调用。 */
 	UFUNCTION(BlueprintCallable, Category = "GP|Attribute")
 	void SetHealth(float NewHealth);
 
@@ -33,6 +33,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GP|Attribute")
 	float GetHealthPercent() const;
 
+	/** 声明属性组件需要复制的生命值和死亡状态。 */
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 protected:
 	virtual void BeginPlay() override;
 	
@@ -42,14 +45,25 @@ public:
 	FGFActorDeadDelegate OnOwnerDead;
 private:
 	/** 当前生命值，只通过 SetHealth 修改以保持状态一致。 */
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing = OnRep_Health)
 	float Health = 100.0f;
 
 	/** 最大生命值，用于限制当前生命和计算生命比例。 */
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	float MaxHealth = 100.0f;
 
 	/** 缓存死亡状态，便于角色和蓝图直接查询。 */
-	UPROPERTY()
+	UPROPERTY(ReplicatedUsing = OnRep_Dead)
 	bool bDead = false;
+
+	/** 客户端收到生命值更新时用于本地日志和后续 UI 刷新。 */
+	UFUNCTION()
+	void OnRep_Health(float PreviousHealth);
+
+	/** 客户端首次收到死亡状态时广播死亡委托，驱动死亡表现。 */
+	UFUNCTION()
+	void OnRep_Dead(bool bWasDead);
+
+	/** 在死亡状态从 false 变为 true 时广播死亡事件。 */
+	void BroadcastOwnerDeadIfNeeded(bool bWasDead);
 };

@@ -6,11 +6,9 @@
 #include "Gameplay/Data/GPSkillData.h"
 #include "GPCombatComponent.generated.h"
 
-class AGPPlayerController;
-
 /**
  * 玩家战斗组件，负责执行当前 Demo 的临时命中检测与伤害请求。
- * 该组件通过 PlayerController 持有的输入委托对象订阅攻击输入，不直接依赖输入管理器。
+ * 输入由角色接收后转发到本组件，本组件只处理攻击规则、命中检测和伤害请求。
  */
 UCLASS(BlueprintType, Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class GPGAMEPLAY_API UGPCombatComponent : public UActorComponent
@@ -24,12 +22,6 @@ public:
 	void HandleAttackInput();
 
 protected:
-	/** BeginPlay 时订阅当前控制器上的攻击输入委托。 */
-	virtual void BeginPlay() override;
-
-	/** EndPlay 时清理攻击输入委托，避免组件销毁后仍收到回调。 */
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
 	/** 单次普通攻击造成的临时伤害值，后续可由技能表或武器配置替代。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "GP|Combat", meta = (ClampMin = "0.0"))
 	float BaseDamage = 10.0f;
@@ -51,28 +43,22 @@ protected:
 	TEnumAsByte<ECollisionChannel> AttackTraceChannel = ECC_Pawn;
 
 private:
-	/** 绑定当前控制器输入委托对象上的攻击输入。 */
-	void InitializeInputDelegateBindings();
-
-	/** 清理攻击输入委托绑定，避免组件销毁后留下悬挂回调。 */
-	void ClearInputDelegateBindings();
-
-	/** 响应攻击按下输入委托。 */
-	void HandleAttackPressedInput();
-
 	/** 解析普通攻击配置；DataTable 未配置或行无效时使用组件上的 fallback 数值。 */
 	void ResolveBasicAttackConfig(float& OutDamage, float& OutRange, float& OutSweepRadius, float& OutCooldown, FName& OutSkillId) const;
 
 	/** 根据玩家控制器和鼠标位置计算攻击方向，失败时回退到 Owner 朝向。 */
 	FVector GetAttackDirection() const;
 
-	/** 执行临时 Sweep 检测，并把命中的目标交给伤害接口。 */
+	/** 在服务器权威侧执行 Sweep 检测，并把命中的目标交给伤害接口。 */
 	void PerformAttackSweep();
+
+	/** 接收拥有者客户端的攻击请求，服务器使用自身状态重新执行命中检测和伤害结算。 */
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerHandleAttackInput();
 
 	/** 当 Debug CVar 开启时绘制攻击 Sweep 的调试图形。 */
 	void DrawAttackDebug(const FVector& Start, const FVector& End, float SweepRadius, const FHitResult& HitResult, bool bHit) const;
 
-	/** 当前已经绑定过输入委托的控制器，用于销毁时从正确实例清理回调。 */
-	UPROPERTY(Transient)
-	TWeakObjectPtr<AGPPlayerController> BoundInputDelegatesOwner;
+	/** 查询 Owner 是否已死亡，死亡后不再响应攻击输入。 */
+	bool IsOwnerDead() const;
 };

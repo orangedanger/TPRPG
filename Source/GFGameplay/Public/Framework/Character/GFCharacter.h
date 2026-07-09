@@ -28,7 +28,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "GP|Character")
 	UCameraComponent* GetFollowCamera() const;
 protected:
-	virtual void BeginPlay() override;
+	/** 服务端 Possess 后刷新控制器缓存，派生类可在自身 override 中重建输入绑定。 */
+	virtual void PossessedBy(AController* NewController) override;
+
+	/** 服务端 UnPossess 后清空控制器缓存。 */
+	virtual void UnPossessed() override;
+
+	/** 客户端收到 Controller 复制后刷新控制器缓存。 */
+	virtual void OnRep_Controller() override;
 	
 	/** 第三人称相机臂，负责跟随角色并响应控制器旋转。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Camera", meta = (AllowPrivateAccess = "true"))
@@ -37,8 +44,4 @@ protected:
 	/** 第三人称跟随相机，挂在 CameraBoom 上用于本地视角表现。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Camera", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> FollowCamera;
-	
-	/** 当前控制该角色的 GF PlayerController，派生类用它访问输入委托和控制旋转。 */
-	UPROPERTY(Transient)
-	TWeakObjectPtr<AGFPlayerController> PlayerController;
 };
