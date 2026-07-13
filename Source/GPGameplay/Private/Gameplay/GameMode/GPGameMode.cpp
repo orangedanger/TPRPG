@@ -12,8 +12,3 @@ AGPGameMode::AGPGameMode()
 	PlayerControllerClass = AGPPlayerController::StaticClass();
 	DefaultPawnClass = AGPCharacter::StaticClass();
 }
-
-void AGPGameMode::InitGameState()
-{
-	Super::InitGameState();
-}

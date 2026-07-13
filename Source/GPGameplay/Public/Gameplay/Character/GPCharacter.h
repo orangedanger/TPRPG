@@ -7,11 +7,10 @@
 
 class UGPAttributeSetComponent;
 class UGPCombatComponent;
-class AGPPlayerController;
 
 /**
  * 项目默认角色，负责组合属性与战斗组件，并作为当前 Demo 的输入响应者、伤害发起者和伤害接收者。
- * 角色通过当前 PlayerController 持有的输入委托对象订阅输入，并把攻击输入转发给战斗组件。
+ * 角色通过当前 PlayerController 的 InputManager 订阅输入，并把攻击输入转发给战斗组件。
  */
 UCLASS(Blueprintable)
 class GPGAMEPLAY_API AGPCharacter : public AGFCharacter, public IDamageManagerInterface
@@ -66,10 +65,10 @@ private:
 	/** 清理属性组件委托绑定，避免销毁后继续收到组件广播。 */
 	void ClearAttributeDelegateBindings();
 
-	/** 绑定当前控制器输入委托；若已经绑定到同一控制器则直接返回。 */
+	/** 从当前本地控制器的 InputManager 绑定输入委托，重复调用时先清理自身旧绑定。 */
 	void BindInputDelegateBindings();
 
-	/** 从实际绑定过的控制器上清理输入委托，避免控制器缓存变化后清错对象。 */
+	/** 从当前本地控制器的 InputManager 清理自身输入委托。 */
 	void ClearInputDelegateBindings();
 
 	/** 死亡后屏蔽移动、跳跃和攻击等 gameplay 输入。 */
@@ -98,7 +97,4 @@ private:
 	/** 让 Mesh 进入布娃娃并关闭 Capsule 碰撞，后续正式死亡流程会替换这里。 */
 	void ApplyDeathRagdoll();
 
-	/** 当前已经绑定过输入委托的控制器，用于只在控制器变化时清理和重绑。 */
-	UPROPERTY(Transient)
-	TWeakObjectPtr<AGPPlayerController> PlayerController;
 };

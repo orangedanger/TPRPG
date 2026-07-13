@@ -4,7 +4,6 @@
 #include "EnhancedInputSubsystems.h"
 #include "Engine/DataTable.h"
 #include "Engine/LocalPlayer.h"
-#include "Framework/Input/GFInputDelegates.h"
 #include "Framework/PlayerController/GFPlayerController.h"
 #include "InputMappingContext.h"
 
@@ -28,8 +27,13 @@ void UGFInputManager::Deinitialize()
 {
 	ClearActionBindings();
 	BindingRecords.Reset();
-	PendingInputTags.Reset();
 	ClearMappingContexts();
+	InputDelegates.OnMoveInput.Clear();
+	InputDelegates.OnLookInput.Clear();
+	InputDelegates.OnJumpPressed.Clear();
+	InputDelegates.OnJumpReleased.Clear();
+	InputDelegates.OnAttackPressed.Clear();
+	InputDelegates.OnAttackReleased.Clear();
 
 	EnhancedInputComponent = nullptr;
 	LocalPlayerSubsystem = nullptr;
@@ -47,23 +51,6 @@ void UGFInputManager::SetInputComponent(UEnhancedInputComponent* InInputComponen
 	EnhancedInputComponent = InInputComponent;
 	BindConfiguredActions();
 }
-
-void UGFInputManager::UpdateInputActions(float DeltaTime)
-{
-	if (PendingInputTags.IsEmpty())
-	{
-		return;
-	}
-
-	TArray<EGFInputActionTag> TagsToProcess;
-	Swap(TagsToProcess, PendingInputTags);
-
-	for (const EGFInputActionTag InputTag : TagsToProcess)
-	{
-		ProcessInputAction(InputTag);
-	}
-}
-
 void UGFInputManager::ApplyMappingContexts()
 {
 	if (MappingContexts.IsEmpty())
@@ -158,42 +145,32 @@ void UGFInputManager::BindConfiguredActions()
 
 void UGFInputManager::HandleMoveInput(const FInputActionValue& Value)
 {
-	if (OwnerController == nullptr || OwnerController->GetInputDelegates() == nullptr)
-	{
-		return;
-	}
-
-	OwnerController->GetInputDelegates()->OnMoveInput.Broadcast(Value.Get<FVector2D>());
+	InputDelegates.OnMoveInput.Broadcast(Value.Get<FVector2D>());
 }
 
 void UGFInputManager::HandleLookInput(const FInputActionValue& Value)
 {
-	if (OwnerController == nullptr || OwnerController->GetInputDelegates() == nullptr)
-	{
-		return;
-	}
-
-	OwnerController->GetInputDelegates()->OnLookInput.Broadcast(Value.Get<FVector2D>());
+	InputDelegates.OnLookInput.Broadcast(Value.Get<FVector2D>());
 }
 
 void UGFInputManager::HandleJumpPressedInput()
 {
-	QueueInputAction(EGFInputActionTag::Input_Jump_Pressed);
+	InputDelegates.OnJumpPressed.Broadcast();
 }
 
 void UGFInputManager::HandleJumpReleasedInput()
 {
-	QueueInputAction(EGFInputActionTag::Input_Jump_Released);
+	InputDelegates.OnJumpReleased.Broadcast();
 }
 
 void UGFInputManager::HandleAttackPressedInput()
 {
-	QueueInputAction(EGFInputActionTag::Input_Attack_Pressed);
+	InputDelegates.OnAttackPressed.Broadcast();
 }
 
 void UGFInputManager::HandleAttackReleasedInput()
 {
-	QueueInputAction(EGFInputActionTag::Input_Attack_Released);
+	InputDelegates.OnAttackReleased.Broadcast();
 }
 
 void UGFInputManager::CacheLocalPlayerSubsystem()
@@ -355,44 +332,6 @@ void UGFInputManager::ClearActionBindings()
 	for (FInputActionBindingRecord& Record : BindingRecords)
 	{
 		UnbindRecord(Record);
-	}
-}
-
-void UGFInputManager::QueueInputAction(EGFInputActionTag InputTag)
-{
-	if (InputTag == EGFInputActionTag::None)
-	{
-		return;
-	}
-
-	PendingInputTags.Add(InputTag);
-}
-
-void UGFInputManager::ProcessInputAction(EGFInputActionTag InputTag)
-{
-	if (OwnerController == nullptr || OwnerController->GetInputDelegates() == nullptr)
-	{
-		return;
-	}
-
-	FGFInputDelegates* InputDelegates = OwnerController->GetInputDelegates();
-	switch (InputTag)
-	{
-	case EGFInputActionTag::Input_Jump_Pressed:
-		InputDelegates->OnJumpPressed.Broadcast();
-		break;
-	case EGFInputActionTag::Input_Jump_Released:
-		InputDelegates->OnJumpReleased.Broadcast();
-		break;
-	case EGFInputActionTag::Input_Attack_Pressed:
-		InputDelegates->OnAttackPressed.Broadcast();
-		break;
-	case EGFInputActionTag::Input_Attack_Released:
-		InputDelegates->OnAttackReleased.Broadcast();
-		break;
-	case EGFInputActionTag::None:
-	default:
-		break;
 	}
 }
 

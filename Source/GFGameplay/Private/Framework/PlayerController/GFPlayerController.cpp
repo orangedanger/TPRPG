@@ -11,11 +11,21 @@ AGFPlayerController::AGFPlayerController()
 	InputManagerClass = UGFInputManager::StaticClass();
 }
 
+/**
+ * APlayerController Begin
+ */
 void AGFPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
 	InitializeInput();
+}
+
+void AGFPlayerController::OnPossess(APawn* InPawn)
+{
+	CreateInputManager();
+
+	Super::OnPossess(InPawn);
 }
 
 void AGFPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -70,18 +80,9 @@ void AGFPlayerController::SetupInputComponent()
 	InputManager->SetInputComponent(EnhancedInputComponent);
 	ConfiguredEnhancedInputComponent = EnhancedInputComponent;
 }
-
-void AGFPlayerController::PlayerTick(float DeltaTime)
-{
-	Super::PlayerTick(DeltaTime);
-
-	if (IsLocalController() == false || InputManager == nullptr)
-	{
-		return;
-	}
-
-	InputManager->UpdateInputActions(DeltaTime);
-}
+/**
+ * APlayerController End
+ */
 
 void AGFPlayerController::InitializeInput()
 {
@@ -95,26 +96,44 @@ void AGFPlayerController::InitializeInput()
 		return;
 	}
 
-	if (InputManagerClass == nullptr)
+	UGFInputManager* CreatedInputManager = CreateInputManager();
+	if (CreatedInputManager != nullptr)
 	{
-		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is not configured. Controller=%s"), *GetNameSafe(this));
-	}
-	else if (InputManagerClass->HasAnyClassFlags(CLASS_Abstract))
-	{
-		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is abstract and cannot be created. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(InputManagerClass));
-	}
-	else
-	{
-		InputManager = NewObject<UGFInputManager>(this, InputManagerClass, TEXT("InputManager"));
-		if (InputManager == nullptr)
-		{
-			UE_LOG(LogGFPlayerController, Warning, TEXT("Failed to create input manager. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(InputManagerClass));
-		}
-		else
-		{
-			InputManager->Initialize(this);
-		}
+		CreatedInputManager->Initialize(this);
 	}
 
 	bInputInitialized = true;
+}
+
+UGFInputManager* AGFPlayerController::CreateInputManager()
+{
+	if (InputManager != nullptr)
+	{
+		return InputManager;
+	}
+
+	if (IsLocalController() == false)
+	{
+		return nullptr;
+	}
+
+	if (InputManagerClass == nullptr)
+	{
+		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is not configured. Controller=%s"), *GetNameSafe(this));
+		return nullptr;
+	}
+
+	if (InputManagerClass->HasAnyClassFlags(CLASS_Abstract))
+	{
+		UE_LOG(LogGFPlayerController, Warning, TEXT("InputManagerClass is abstract and cannot be created. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(InputManagerClass));
+		return nullptr;
+	}
+
+	InputManager = NewObject<UGFInputManager>(this, InputManagerClass, TEXT("InputManager"));
+	if (InputManager == nullptr)
+	{
+		UE_LOG(LogGFPlayerController, Warning, TEXT("Failed to create input manager. Controller=%s Class=%s"), *GetNameSafe(this), *GetNameSafe(InputManagerClass));
+	}
+
+	return InputManager;
 }

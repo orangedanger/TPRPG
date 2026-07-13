@@ -1,6 +1,6 @@
 #include "Gameplay/Character/GPCharacter.h"
 
-#include "Framework/Input/GFInputDelegates.h"
+#include "Framework/Input/GFInputManager.h"
 #include "Gameplay/Components/GPAttributeSetComponent.h"
 #include "Gameplay/Components/GPCombatComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -183,7 +183,9 @@ void AGPCharacter::ApplyDeathRagdoll()
 }
 // End attribute delegate handlers
 
-// Begin input delegate handlers
+/**
+ * 输入委托处理 Begin
+ */
 void AGPCharacter::BindInputDelegateBindings()
 {
 	if (IsCharacterDead())
@@ -201,52 +203,51 @@ void AGPCharacter::BindInputDelegateBindings()
 
 	if (CurrentPlayerController->IsLocalController() == false)
 	{
-		ClearInputDelegateBindings();
 		return;
 	}
 
-	if (PlayerController.Get() == CurrentPlayerController)
+	UGFInputManager* CurrentInputManager = CurrentPlayerController->GetInputManager();
+	if (CurrentInputManager == nullptr)
 	{
 		return;
 	}
 
-	ClearInputDelegateBindings();
+	FGFInputDelegates& InputDelegates = CurrentInputManager->GetInputDelegates();
+	InputDelegates.OnMoveInput.RemoveAll(this);
+	InputDelegates.OnLookInput.RemoveAll(this);
+	InputDelegates.OnJumpPressed.RemoveAll(this);
+	InputDelegates.OnJumpReleased.RemoveAll(this);
+	InputDelegates.OnAttackPressed.RemoveAll(this);
+	InputDelegates.OnAttackReleased.RemoveAll(this);
 
-	FGFInputDelegates* InputDelegates = CurrentPlayerController->GetInputDelegates();
-	if (InputDelegates == nullptr)
-	{
-		return;
-	}
-	
-	InputDelegates->OnMoveInput.AddUObject(this, &AGPCharacter::HandleMoveInput);
-	InputDelegates->OnLookInput.AddUObject(this, &AGPCharacter::HandleLookInput);
-	InputDelegates->OnJumpPressed.AddUObject(this, &AGPCharacter::HandleJumpPressedInput);
-	InputDelegates->OnJumpReleased.AddUObject(this, &AGPCharacter::HandleJumpReleasedInput);
-	InputDelegates->OnAttackPressed.AddUObject(this, &AGPCharacter::HandleAttackPressedInput);
-	PlayerController = CurrentPlayerController;
+	InputDelegates.OnMoveInput.AddUObject(this, &AGPCharacter::HandleMoveInput);
+	InputDelegates.OnLookInput.AddUObject(this, &AGPCharacter::HandleLookInput);
+	InputDelegates.OnJumpPressed.AddUObject(this, &AGPCharacter::HandleJumpPressedInput);
+	InputDelegates.OnJumpReleased.AddUObject(this, &AGPCharacter::HandleJumpReleasedInput);
+	InputDelegates.OnAttackPressed.AddUObject(this, &AGPCharacter::HandleAttackPressedInput);
 }
 
 void AGPCharacter::ClearInputDelegateBindings()
 {
-	AGPPlayerController* BoundPlayerController = PlayerController.Get();
-	if (BoundPlayerController == nullptr)
+	AGPPlayerController* CurrentPlayerController = Cast<AGPPlayerController>(Controller);
+	if (CurrentPlayerController == nullptr || CurrentPlayerController->IsLocalController() == false)
 	{
-		PlayerController.Reset();
 		return;
 	}
 
-	FGFInputDelegates* InputDelegates = BoundPlayerController->GetInputDelegates();
-	if (InputDelegates != nullptr)
+	UGFInputManager* CurrentInputManager = CurrentPlayerController->GetInputManager();
+	if (CurrentInputManager == nullptr)
 	{
-		InputDelegates->OnMoveInput.RemoveAll(this);
-		InputDelegates->OnLookInput.RemoveAll(this);
-		InputDelegates->OnJumpPressed.RemoveAll(this);
-		InputDelegates->OnJumpReleased.RemoveAll(this);
-		InputDelegates->OnAttackPressed.RemoveAll(this);
-		InputDelegates->OnAttackReleased.RemoveAll(this);
+		return;
 	}
 
-	PlayerController.Reset();
+	FGFInputDelegates& InputDelegates = CurrentInputManager->GetInputDelegates();
+	InputDelegates.OnMoveInput.RemoveAll(this);
+	InputDelegates.OnLookInput.RemoveAll(this);
+	InputDelegates.OnJumpPressed.RemoveAll(this);
+	InputDelegates.OnJumpReleased.RemoveAll(this);
+	InputDelegates.OnAttackPressed.RemoveAll(this);
+	InputDelegates.OnAttackReleased.RemoveAll(this);
 }
 
 bool AGPCharacter::IsCharacterDead() const
@@ -256,12 +257,13 @@ bool AGPCharacter::IsCharacterDead() const
 
 void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)
 {
-	if (PlayerController == nullptr || IsCharacterDead())
+	AGPPlayerController* CurrentPlayerController = Cast<AGPPlayerController>(Controller);
+	if (CurrentPlayerController == nullptr || IsCharacterDead())
 	{
 		return;
 	}
 
-	const FRotator ControlRotation = PlayerController->GetControlRotation();
+	const FRotator ControlRotation = CurrentPlayerController->GetControlRotation();
 	const FRotator YawRotation(0.0f, ControlRotation.Yaw, 0.0f);
 
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
@@ -273,13 +275,14 @@ void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)
 
 void AGPCharacter::HandleLookInput(const FVector2D& LookAxisVector)
 {
-	if (PlayerController == nullptr || IsCharacterDead())
+	AGPPlayerController* CurrentPlayerController = Cast<AGPPlayerController>(Controller);
+	if (CurrentPlayerController == nullptr || IsCharacterDead())
 	{
 		return;
 	}
 
-	PlayerController->AddYawInput(LookAxisVector.X);
-	PlayerController->AddPitchInput(LookAxisVector.Y);
+	CurrentPlayerController->AddYawInput(LookAxisVector.X);
+	CurrentPlayerController->AddPitchInput(LookAxisVector.Y);
 }
 
 void AGPCharacter::HandleJumpPressedInput()
@@ -312,4 +315,6 @@ void AGPCharacter::HandleAttackPressedInput()
 	CombatComponent->HandleAttackInput();
 }
 
-// End input delegate handlers
+/**
+ * 输入委托处理 End
+ */

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Framework/Input/GFInputDelegates.h"
 #include "GameFramework/PlayerController.h"
 #include "GFPlayerController.generated.h"
 
@@ -19,16 +18,20 @@ class GFGAMEPLAY_API AGFPlayerController : public APlayerController
 public:
 	AGFPlayerController();
 
-	/** 返回当前控制器持有的输入委托对象，订阅者通过它绑定或解绑输入响应。 */
-	FGFInputDelegates* GetInputDelegates() { return &InputDelegates; }
-
 	/** 返回当前控制器持有的输入管理器。 */
 	UFUNCTION(BlueprintPure, Category = "Input")
 	UGFInputManager* GetInputManager() const { return InputManager; }
 
 protected:
-	/** BeginPlay 时确保本地输入委托对象和输入管理器已经创建。 */
+	/**
+	 * APlayerController Begin
+	 */
+
+	/** BeginPlay 时完成本地输入管理器初始化。 */
 	virtual void BeginPlay() override;
+
+	/** authority Possess 进入 Pawn 回调前确保本地输入管理器对象已经创建。 */
+	virtual void OnPossess(APawn* InPawn) override;
 
 	/** EndPlay 时移除本控制器添加的 Enhanced Input 上下文和动作绑定。 */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -36,8 +39,9 @@ protected:
 	/** 在引擎创建 InputComponent 后直接交给输入管理器执行 Enhanced Input 绑定。 */
 	virtual void SetupInputComponent() override;
 
-	/** 每帧驱动输入管理器处理缓存输入事件。 */
-	virtual void PlayerTick(float DeltaTime) override;
+	/**
+	 * APlayerController End
+	 */
 
 	/** 蓝图可配置的输入管理器类型，玩法层通常在 C++ 构造函数中设置默认子类。 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
@@ -47,17 +51,17 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Input", Transient)
 	TObjectPtr<UGFInputManager> InputManager = nullptr;
 
-	/** 当前控制器拥有的输入委托集合，生命周期跟随控制器本身。 */
-	FGFInputDelegates InputDelegates;
-
-	/** 初始化输入委托对象和输入管理器，内部防止重复创建。 */
+	/** 完成本地输入管理器和 Enhanced Input 子系统初始化，内部防止重复执行。 */
 	void InitializeInput();
 
 private:
+	/** 仅创建本地输入管理器对象，不提前访问 LocalPlayerSubsystem 或绑定 InputComponent。 */
+	UGFInputManager* CreateInputManager();
+
 	/** 已经交给输入管理器配置过的 Enhanced InputComponent，避免重复绑定同一组件。 */
 	UPROPERTY(Transient)
 	TObjectPtr<UEnhancedInputComponent> ConfiguredEnhancedInputComponent = nullptr;
 
-	/** 输入对象是否已经完成创建和初始化。 */
+	/** 输入管理器是否已经完成 Enhanced Input 子系统初始化。 */
 	bool bInputInitialized = false;
 };

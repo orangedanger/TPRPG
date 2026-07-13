@@ -4,7 +4,6 @@
 #include "Framework/Character/GFCharacter.h"
 
 #include "Camera/CameraComponent.h"
-#include "Framework/PlayerController/GFPlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 
@@ -34,21 +33,6 @@ AGFCharacter::AGFCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
-}
-
-void AGFCharacter::PossessedBy(AController* NewController)
-{
-	Super::PossessedBy(NewController);
-}
-
-void AGFCharacter::UnPossessed()
-{
-	Super::UnPossessed();
-}
-
-void AGFCharacter::OnRep_Controller()
-{
-	Super::OnRep_Controller();
 }
 
 USpringArmComponent* AGFCharacter::GetCameraBoom() const

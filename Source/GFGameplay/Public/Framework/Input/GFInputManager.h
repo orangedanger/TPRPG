@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Framework/DelegateDefine.h"
 #include "Framework/Input/InputDefine.h"
 #include "InputActionValue.h"
 #include "UObject/Object.h"
@@ -13,20 +14,8 @@ class UEnhancedInputLocalPlayerSubsystem;
 class UInputMappingContext;
 
 /**
- * 输入事件标签，非轴类输入先缓存标签，再在 UpdateInputActions 中统一处理。
- */
-UENUM(BlueprintType)
-enum class EGFInputActionTag : uint8
-{
-	None,
-	Input_Jump_Pressed,
-	Input_Jump_Released,
-	Input_Attack_Pressed,
-	Input_Attack_Released
-};
-
-/**
- * Gameplay Framework 输入管理器，负责 Enhanced Input 绑定、输入缓存和向控制器输入委托对象广播。
+ * Gameplay Framework 输入管理器，负责 Enhanced Input 配置、动作绑定和输入委托广播。
+ * 每个本地 PlayerController 持有独立实例，避免不同玩家共享输入状态。
  */
 UCLASS(Blueprintable, BlueprintType)
 class GFGAMEPLAY_API UGFInputManager : public UObject
@@ -43,8 +32,8 @@ public:
 	/** 设置接收 Action 绑定的 Enhanced Input 组件，随后绑定 DataTable 中配置的 Action。 */
 	virtual void SetInputComponent(UEnhancedInputComponent* InInputComponent);
 
-	/** 每帧处理缓存的按键类输入标签，并广播到 Controller 持有的委托对象。 */
-	virtual void UpdateInputActions(float DeltaTime);
+	/** 返回当前 Manager 实例拥有的输入委托集合。 */
+	FGFInputDelegates& GetInputDelegates() { return InputDelegates; }
 
 	/** 将配置的 MappingContext 添加到初始化时缓存的 Enhanced Input 子系统。 */
 	UFUNCTION(BlueprintCallable, Category = "Input")
@@ -73,16 +62,16 @@ protected:
 	/** Look 输入单独处理，因为它携带 FVector2D。 */
 	void HandleLookInput(const FInputActionValue& Value);
 
-	/** Jump 按下只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	/** Jump 按下时直接广播当前 Manager 的输入委托。 */
 	void HandleJumpPressedInput();
 
-	/** Jump 松开只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	/** Jump 松开时直接广播当前 Manager 的输入委托。 */
 	void HandleJumpReleasedInput();
 
-	/** Attack 按下只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	/** Attack 按下时直接广播当前 Manager 的输入委托。 */
 	void HandleAttackPressedInput();
 
-	/** Attack 松开只缓存标签，实际广播在 UpdateInputActions 中处理。 */
+	/** Attack 松开时直接广播当前 Manager 的输入委托。 */
 	void HandleAttackReleasedInput();
 
 	/** 拥有当前输入管理器的 PlayerController。 */
@@ -105,17 +94,15 @@ protected:
 	UPROPERTY(Transient)
 	TArray<FInputActionBindingRecord> BindingRecords;
 
-	/** 本帧等待处理的按键类输入标签。 */
-	TArray<EGFInputActionTag> PendingInputTags;
-
 private:
+	/** 当前 Manager 实例拥有的输入广播集合，生命周期跟随所属 PlayerController。 */
+	FGFInputDelegates InputDelegates;
+
 	void CacheLocalPlayerSubsystem();
 	void AddConfiguredBindingRecord(const FInputActionTableRow& Row);
 	void AddBindingRecord(EInputActionType ActionType, UInputAction* InputAction, ETriggerEvent TriggerEvent);
 	void BindRecord(FInputActionBindingRecord& Record);
 	void UnbindRecord(FInputActionBindingRecord& Record);
 	void ClearActionBindings();
-	void QueueInputAction(EGFInputActionTag InputTag);
-	void ProcessInputAction(EGFInputActionTag InputTag);
 	bool CanBindRecord(const FInputActionBindingRecord& Record) const;
 };

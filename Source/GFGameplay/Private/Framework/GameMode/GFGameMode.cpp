@@ -3,8 +3,3 @@
 AGFGameMode::AGFGameMode()
 {
 }
-
-void AGFGameMode::InitGameState()
-{
-	Super::InitGameState();
-}
