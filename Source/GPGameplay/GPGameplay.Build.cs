@@ -15,6 +15,9 @@ public class GPGameplay : ModuleRules
 			"Engine", 
 			"InputCore", 
 			"EnhancedInput", 
+			"GameplayAbilities",
+			"GameplayTags",
+			"GameplayTasks",
 			"GFGameplay"
 		});
 

@@ -1,8 +1,9 @@
 #include "Gameplay/Character/GPCharacter.h"
 
 #include "Framework/Input/GFInputManager.h"
-#include "Gameplay/Components/GPAttributeSetComponent.h"
+#include "Gameplay/Attributes/GPHealthAttributeSet.h"
 #include "Gameplay/Components/GPCombatComponent.h"
+#include "AbilitySystemComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -12,8 +13,10 @@ DEFINE_LOG_CATEGORY_STATIC(LogGPCharacter, Log, All);
 
 AGPCharacter::AGPCharacter()
 {
-	AttributeSetComponent = CreateDefaultSubobject<UGPAttributeSetComponent>(TEXT("AttributeSetComponent"));
 	CombatComponent = CreateDefaultSubobject<UGPCombatComponent>(TEXT("CombatComponent"));
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent->SetIsReplicated(true);
+	HealthAttributeSet = CreateDefaultSubobject<UGPHealthAttributeSet>(TEXT("HealthAttributeSet"));
 }
 
 // Begin AActor interface
@@ -21,12 +24,11 @@ void AGPCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	InitializeAttributeDelegateBindings();
+	InitializeAbilityActorInfo();
 }
 
 void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	ClearAttributeDelegateBindings();
 	ClearInputDelegateBindings();
 
 	Super::EndPlay(EndPlayReason);
@@ -53,6 +55,17 @@ void AGPCharacter::OnRep_Controller()
 	BindInputDelegateBindings();
 }
 // End AActor interface
+
+/**
+ * IAbilitySystemInterface Begin
+ */
+UAbilitySystemComponent* AGPCharacter::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+/**
+ * IAbilitySystemInterface End
+ */
 
 /**
  * IDamageManagerInterface Begin
@@ -96,13 +109,7 @@ void AGPCharacter::TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, fl
 		return;
 	}
 
-	if (AttributeSetComponent == nullptr)
-	{
-		UE_LOG(LogGPCharacter, Warning, TEXT("TakeDamage skipped because AttributeSetComponent is null. Receiver=%s Instigator=%s Causer=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), *GetNameSafe(DamageCauser), DamageAmount);
-		return;
-	}
-
-	if (AttributeSetComponent->IsDead())
+	if (IsCharacterDead())
 	{
 		UE_LOG(LogGPCharacter, Log, TEXT("TakeDamage skipped because receiver is already dead. Receiver=%s Instigator=%s Damage=%.2f"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), DamageAmount);
 		return;
@@ -114,43 +121,36 @@ void AGPCharacter::TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, fl
 		return;
 	}
 
-	const float OldHealth = AttributeSetComponent->GetHealth();
-	UE_LOG(LogGPCharacter, Log, TEXT("TakeDamage. Receiver=%s Instigator=%s Causer=%s Damage=%.2f OldHealth=%.2f Impact=%s"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), *GetNameSafe(DamageCauser), DamageAmount, OldHealth, *HitResult.ImpactPoint.ToString());
-	AttributeSetComponent->SetHealth(OldHealth - DamageAmount);
+	if (AbilitySystemComponent == nullptr || HealthAttributeSet == nullptr)
+	{
+		UE_LOG(LogGPCharacter, Warning, TEXT("TakeDamage skipped because GAS Health is unavailable. Receiver=%s Instigator=%s Causer=%s Damage=%.2f ASC=%s HealthAttributeSet=%s"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), *GetNameSafe(DamageCauser), DamageAmount, *GetNameSafe(AbilitySystemComponent), *GetNameSafe(HealthAttributeSet));
+		return;
+	}
+
+	const float OldHealth = HealthAttributeSet->GetHealth();
+	// 服务器只修改 GAS Health；旧属性组件不参与结算或死亡，避免双写和重复死亡表现。
+	AbilitySystemComponent->ApplyModToAttribute(UGPHealthAttributeSet::GetHealthAttribute(), EGameplayModOp::Additive, -DamageAmount);
+
+	const float NewHealth = HealthAttributeSet->GetHealth();
+	UE_LOG(LogGPCharacter, Log, TEXT("TakeDamage. Receiver=%s Instigator=%s Causer=%s Damage=%.2f OldHealth=%.2f NewHealth=%.2f Impact=%s"), *GetNameSafe(this), *GetNameSafe(DamageInstigator), *GetNameSafe(DamageCauser), DamageAmount, OldHealth, NewHealth, *HitResult.ImpactPoint.ToString());
+	if (NewHealth <= 0.0f)
+	{
+		ApplyDeathRagdoll();
+	}
 }
 /**
  * IDamageManagerInterface End
  */
 
-// Begin attribute delegate handlers
-void AGPCharacter::InitializeAttributeDelegateBindings()
+void AGPCharacter::InitializeAbilityActorInfo()
 {
-	if (AttributeSetComponent == nullptr)
+	if (AbilitySystemComponent == nullptr)
 	{
 		return;
 	}
 
-	AttributeSetComponent->OnOwnerDead.AddDynamic(this, &AGPCharacter::HandleAttributeOwnerDead);
-}
-
-void AGPCharacter::ClearAttributeDelegateBindings()
-{
-	if (AttributeSetComponent == nullptr)
-	{
-		return;
-	}
-
-	AttributeSetComponent->OnOwnerDead.RemoveAll(this);
-}
-
-void AGPCharacter::HandleAttributeOwnerDead(AActor* DeadActor)
-{
-	if (DeadActor != this)
-	{
-		return;
-	}
-
-	ApplyDeathRagdoll();
+	// Owner、Avatar 都是角色自身，不依赖 Controller 或 PlayerState，因此 BeginPlay 初始化一次即可。
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 }
 
 // TODO: 临时死亡效果
@@ -181,8 +181,6 @@ void AGPCharacter::ApplyDeathRagdoll()
 		OwnerMesh->WakeAllRigidBodies();
 	}
 }
-// End attribute delegate handlers
-
 /**
  * 输入委托处理 Begin
  */
@@ -252,7 +250,7 @@ void AGPCharacter::ClearInputDelegateBindings()
 
 bool AGPCharacter::IsCharacterDead() const
 {
-	return AttributeSetComponent != nullptr && AttributeSetComponent->IsDead();
+	return HealthAttributeSet != nullptr && HealthAttributeSet->GetHealth() <= 0.0f;
 }
 
 void AGPCharacter::HandleMoveInput(const FVector2D& MovementVector)

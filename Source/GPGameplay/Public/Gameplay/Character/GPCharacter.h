@@ -3,22 +3,35 @@
 #include "CoreMinimal.h"
 #include "Framework/Character/GFCharacter.h"
 #include "Gameplay/Interfaces/DamageManagerInterface.h"
+#include "AbilitySystemInterface.h"
 #include "GPCharacter.generated.h"
 
-class UGPAttributeSetComponent;
+class UGPHealthAttributeSet;
 class UGPCombatComponent;
+class UAbilitySystemComponent;
 
 /**
  * 项目默认角色，负责组合属性与战斗组件，并作为当前 Demo 的输入响应者、伤害发起者和伤害接收者。
  * 角色通过当前 PlayerController 的 InputManager 订阅输入，并把攻击输入转发给战斗组件。
  */
 UCLASS(Blueprintable)
-class GPGAMEPLAY_API AGPCharacter : public AGFCharacter, public IDamageManagerInterface
+class GPGAMEPLAY_API AGPCharacter : public AGFCharacter, public IDamageManagerInterface, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
 public:
 	AGPCharacter();
+
+	/**
+	 * IAbilitySystemInterface Begin
+	 */
+
+	/** 返回本角色的 ASC，供攻击者与受击目标建立 GAS 上下文。 */
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	/**
+	 * IAbilitySystemInterface End
+	 */
 
 	/**
 	 * IDamageManagerInterface Begin
@@ -27,7 +40,7 @@ public:
 	/** 向命中目标发起伤害，目标需要实现 `IDamageManagerInterface` 才会接收。 */
 	virtual void MakeDamage(AActor* TargetActor, float DamageAmount, const FHitResult& HitResult) override;
 
-	/** 接收伤害并转交给属性组件扣减生命值。 */
+	/** 在服务器通过 GAS Health 结算伤害；生命归零时触发当前临时的死亡布娃娃表现。 */
 	virtual void TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, float DamageAmount, const FHitResult& HitResult) override;
 
 	/**
@@ -35,10 +48,10 @@ public:
 	 */
 
 protected:
-	/** BeginPlay 时只初始化属性委托；输入绑定由 Possess 或 Controller 复制驱动。 */
+	/** BeginPlay 时初始化 GAS ActorInfo；输入绑定由 Possess 或 Controller 复制驱动。 */
 	virtual void BeginPlay() override;
 
-	/** EndPlay 时清理属性和输入委托，避免对象销毁后继续收到广播。 */
+	/** EndPlay 时清理输入委托，避免对象销毁后继续收到广播。 */
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** 服务端 Possess 后重建角色和战斗组件输入委托绑定。 */
@@ -50,20 +63,24 @@ protected:
 	/** 客户端收到 Controller 复制后重建输入委托绑定。 */
 	virtual void OnRep_Controller() override;
 
-	/** 角色生命值和死亡状态的最小属性组件。 */
+	/**
+	 * GAS 生命属性真源。AGPCharacter 和 BP_TestEnemy 都继承其 100/100 默认值；
+	 * 旧属性组件不再参与生命与死亡判定，避免双写和重复触发死亡。
+	 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Attribute")
-	TObjectPtr<UGPAttributeSetComponent> AttributeSetComponent;
+	TObjectPtr<UGPHealthAttributeSet> HealthAttributeSet;
 
 	/** 角色普通攻击、命中检测和伤害发起的战斗组件。 */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Combat")
 	TObjectPtr<UGPCombatComponent> CombatComponent;
 
-private:
-	/** 初始化属性组件上的状态委托绑定，用于响应死亡等属性变化。 */
-	void InitializeAttributeDelegateBindings();
+	/** 当前单机 Demo 的默认 Pawn 同时承担攻击者、受击目标，故 ASC 放在 Actor；未来若玩家需要跨重生能力状态才迁移到 PlayerState，NPC 可继续用 Actor ASC。 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GP|Ability")
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
 
-	/** 清理属性组件委托绑定，避免销毁后继续收到组件广播。 */
-	void ClearAttributeDelegateBindings();
+private:
+	/** 初始化 GAS ActorInfo；当前角色自身同时作为 Owner 和 Avatar。 */
+	void InitializeAbilityActorInfo();
 
 	/** 从当前本地控制器的 InputManager 绑定输入委托，重复调用时先清理自身旧绑定。 */
 	void BindInputDelegateBindings();
@@ -88,10 +105,6 @@ private:
 
 	/** 响应攻击按下输入委托，并把攻击请求转交给战斗组件。 */
 	void HandleAttackPressedInput();
-
-	/** 响应属性组件死亡广播，当前只触发角色本地死亡表现。 */
-	UFUNCTION()
-	void HandleAttributeOwnerDead(AActor* DeadActor);
 
 	// TODO: 临时死亡效果
 	/** 让 Mesh 进入布娃娃并关闭 Capsule 碰撞，后续正式死亡流程会替换这里。 */

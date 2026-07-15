@@ -6,6 +6,7 @@
 class AActor;
 
 /** Actor 死亡时广播的通用委托类型，实例应挂在具体拥有者对象上。 */
+UDELEGATE()
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGFActorDeadDelegate, AActor*, DeadActor);
 
 /** 传递二维轴值的输入委托类型。 */
