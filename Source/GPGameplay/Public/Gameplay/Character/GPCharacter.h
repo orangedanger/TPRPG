@@ -12,7 +12,7 @@ class UAbilitySystemComponent;
 
 /**
  * 项目默认角色，负责组合属性与战斗组件，并作为当前 Demo 的输入响应者、伤害发起者和伤害接收者。
- * 角色通过当前 PlayerController 的 InputManager 订阅输入，并把攻击输入转发给战斗组件。
+ * 角色通过当前 PlayerController 的 InputManager 订阅输入，并由 ASC 激活攻击能力处理攻击请求。
  */
 UCLASS(Blueprintable)
 class GPGAMEPLAY_API AGPCharacter : public AGFCharacter, public IDamageManagerInterface, public IAbilitySystemInterface
@@ -42,6 +42,9 @@ public:
 
 	/** 在服务器通过 GAS Health 结算伤害；生命归零时触发当前临时的死亡布娃娃表现。 */
 	virtual void TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, float DamageAmount, const FHitResult& HitResult) override;
+
+	/** 由 GAS Health 归零通知调用，在服务端仅触发一次当前木桩死亡表现。 */
+	void HandleHealthDepleted();
 
 	/**
 	 * IDamageManagerInterface End
@@ -82,6 +85,12 @@ private:
 	/** 初始化 GAS ActorInfo；当前角色自身同时作为 Owner 和 Avatar。 */
 	void InitializeAbilityActorInfo();
 
+	/** 防止连续 GameplayEffect 在 Health 已归零后重复触发布娃娃表现。 */
+	bool bDeathHandled = false;
+
+	/** 仅由服务器在启动时为 ASC 授予基础攻击能力，客户端通过复制接收能力状态。 */
+	void GrantStartupAbilities();
+
 	/** 从当前本地控制器的 InputManager 绑定输入委托，重复调用时先清理自身旧绑定。 */
 	void BindInputDelegateBindings();
 
@@ -103,7 +112,7 @@ private:
 	/** 响应跳跃松开输入委托。 */
 	void HandleJumpReleasedInput();
 
-	/** 响应攻击按下输入委托，并把攻击请求转交给战斗组件。 */
+	/** 响应攻击按下输入委托，并通过 ASC 激活基础攻击能力。 */
 	void HandleAttackPressedInput();
 
 	// TODO: 临时死亡效果

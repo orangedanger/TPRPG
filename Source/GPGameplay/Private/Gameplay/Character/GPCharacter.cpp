@@ -1,6 +1,7 @@
 #include "Gameplay/Character/GPCharacter.h"
 
 #include "Framework/Input/GFInputManager.h"
+#include "Gameplay/Abilities/GA_BasicAttack.h"
 #include "Gameplay/Attributes/GPHealthAttributeSet.h"
 #include "Gameplay/Components/GPCombatComponent.h"
 #include "AbilitySystemComponent.h"
@@ -25,6 +26,7 @@ void AGPCharacter::BeginPlay()
 	Super::BeginPlay();
 	
 	InitializeAbilityActorInfo();
+	GrantStartupAbilities();
 }
 
 void AGPCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -138,6 +140,18 @@ void AGPCharacter::TakeDamage(AActor* DamageInstigator, AActor* DamageCauser, fl
 		ApplyDeathRagdoll();
 	}
 }
+
+void AGPCharacter::HandleHealthDepleted()
+{
+	if (HasAuthority() == false || bDeathHandled || IsCharacterDead() == false)
+	{
+		return;
+	}
+
+	// Health 已由 GameplayEffect 结算为零；表现层沿用现有布娃娃，不重复处理后续攻击。
+	bDeathHandled = true;
+	ApplyDeathRagdoll();
+}
 /**
  * IDamageManagerInterface End
  */
@@ -151,6 +165,17 @@ void AGPCharacter::InitializeAbilityActorInfo()
 
 	// Owner、Avatar 都是角色自身，不依赖 Controller 或 PlayerState，因此 BeginPlay 初始化一次即可。
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+}
+
+void AGPCharacter::GrantStartupAbilities()
+{
+	if (HasAuthority() == false || AbilitySystemComponent == nullptr)
+	{
+		return;
+	}
+
+	// 能力规格只能由服务器授予；本地输入随后请求 ASC 激活，避免 Character 直接调用战斗组件。
+	AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(UGA_BasicAttack::StaticClass(), 1, INDEX_NONE, this));
 }
 
 // TODO: 临时死亡效果
@@ -305,12 +330,18 @@ void AGPCharacter::HandleJumpReleasedInput()
 
 void AGPCharacter::HandleAttackPressedInput()
 {
-	if (IsCharacterDead() || CombatComponent == nullptr)
+	if (IsCharacterDead())
 	{
 		return;
 	}
 
-	CombatComponent->HandleAttackInput();
+	if (AbilitySystemComponent == nullptr)
+	{
+		return;
+	}
+
+	// 输入层只发起 GAS 激活请求，具体 Sweep 和伤害规则由基础攻击 Ability 处理。
+	AbilitySystemComponent->TryActivateAbilityByClass(UGA_BasicAttack::StaticClass());
 }
 
 /**

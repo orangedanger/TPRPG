@@ -43,6 +43,9 @@ public:
 	/** 在基础值变更前约束生命属性的可用范围。 */
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
 
+	/** 在 GameplayEffect 结算后把 Health 归零结果交给 Avatar 处理死亡表现。 */
+	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
+
 protected:
 	/** 客户端收到当前生命复制时，通知 GAS 刷新对应属性。 */
 	UFUNCTION()

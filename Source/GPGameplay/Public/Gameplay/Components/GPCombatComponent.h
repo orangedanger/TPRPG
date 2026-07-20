@@ -6,9 +6,18 @@
 #include "Gameplay/Data/GPSkillData.h"
 #include "GPCombatComponent.generated.h"
 
+/** 攻击 Sweep 的检测结果，伤害结算由调用方根据结果自行处理。 */
+struct FGPAttackSweepResult
+{
+	bool bHit = false;
+	AActor* HitActor = nullptr;
+	FHitResult HitResult;
+	float Damage = 0.0f;
+};
+
 /**
- * 玩家战斗组件，负责执行当前 Demo 的临时命中检测与伤害请求。
- * 输入由角色接收后转发到本组件，本组件只处理攻击规则、命中检测和伤害请求。
+ * 玩家战斗组件，负责执行当前 Demo 的临时命中检测与结果返回。
+ * 输入由角色接收后转发到本组件，本组件只处理攻击规则、命中检测和伤害数值解析。
  */
 UCLASS(BlueprintType, Blueprintable, ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class GPGAMEPLAY_API UGPCombatComponent : public UActorComponent
@@ -20,6 +29,9 @@ public:
 
 	/** 执行一次普通攻击，通常由本组件响应攻击输入委托后调用。 */
 	void HandleAttackInput();
+
+	/** 仅由 GameplayAbility 调用以执行 Sweep 检测，并返回命中结果与本次解析出的伤害数值。 */
+	FGPAttackSweepResult PerformAttackSweep();
 
 protected:
 	/** 单次普通攻击造成的临时伤害值，后续可由技能表或武器配置替代。 */
@@ -49,10 +61,7 @@ private:
 	/** 根据玩家控制器和鼠标位置计算攻击方向，失败时回退到 Owner 朝向。 */
 	FVector GetAttackDirection() const;
 
-	/** 在服务器权威侧执行 Sweep 检测，并把命中的目标交给伤害接口。 */
-	void PerformAttackSweep();
-
-	/** 接收拥有者客户端的攻击请求，服务器使用自身状态重新执行命中检测和伤害结算。 */
+	/** 接收拥有者客户端的攻击请求，服务器使用自身状态重新执行命中检测和伤害数值解析。 */
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerHandleAttackInput();
 

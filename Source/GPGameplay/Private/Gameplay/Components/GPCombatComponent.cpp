@@ -4,7 +4,6 @@
 #include "DrawDebugHelpers.h"
 #include "HAL/IConsoleManager.h"
 #include "Gameplay/Components/GPAttributeSetComponent.h"
-#include "Gameplay/Interfaces/DamageManagerInterface.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 
@@ -88,12 +87,14 @@ FVector UGPCombatComponent::GetAttackDirection() const
 	return OwnerActor != nullptr ? OwnerActor->GetActorForwardVector() : FVector::ForwardVector;
 }
 
-void UGPCombatComponent::PerformAttackSweep()
+FGPAttackSweepResult UGPCombatComponent::PerformAttackSweep()
 {
+	FGPAttackSweepResult AttackSweepResult;
+
 	if (IsOwnerDead())
 	{
 		UE_LOG(LogGPCombatComponent, Log, TEXT("Attack sweep skipped because owner is dead. Owner=%s"), *GetNameSafe(GetOwner()));
-		return;
+		return AttackSweepResult;
 	}
 
 	float ResolvedDamage = BaseDamage;
@@ -109,7 +110,7 @@ void UGPCombatComponent::PerformAttackSweep()
 	if (OwnerActor == nullptr || World == nullptr)
 	{
 		UE_LOG(LogGPCombatComponent, Warning, TEXT("Attack sweep skipped. Owner=%s World=%s"), *GetNameSafe(OwnerActor), *GetNameSafe(World));
-		return;
+		return AttackSweepResult;
 	}
 
 	const FVector Start = OwnerActor->GetActorLocation();
@@ -138,20 +139,16 @@ void UGPCombatComponent::PerformAttackSweep()
 	if (!bHit || HitActor == nullptr || HitActor == OwnerActor)
 	{
 		UE_LOG(LogGPCombatComponent, Log, TEXT("Attack sweep missed. Owner=%s bHit=%s HitActor=%s"), *GetNameSafe(OwnerActor), bHit ? TEXT("true") : TEXT("false"), *GetNameSafe(HitActor));
-		return;
+		return AttackSweepResult;
 	}
 
 	UE_LOG(LogGPCombatComponent, Log, TEXT("Attack sweep hit. Owner=%s SkillId=%s HitActor=%s Impact=%s Damage=%.2f"), *GetNameSafe(OwnerActor), *ResolvedSkillId.ToString(), *GetNameSafe(HitActor), *HitResult.ImpactPoint.ToString(), ResolvedDamage);
 
-	IDamageManagerInterface* DamageMaker = Cast<IDamageManagerInterface>(OwnerActor);
-	if (DamageMaker == nullptr)
-	{
-		UE_LOG(LogGPCombatComponent, Warning, TEXT("Attack hit cannot apply damage because owner does not implement IDamageManagerInterface. Owner=%s HitActor=%s"), *GetNameSafe(OwnerActor), *GetNameSafe(HitActor));
-		return;
-	}
-
-	UE_LOG(LogGPCombatComponent, Log, TEXT("Attack applying damage. Owner=%s SkillId=%s HitActor=%s Damage=%.2f"), *GetNameSafe(OwnerActor), *ResolvedSkillId.ToString(), *GetNameSafe(HitActor), ResolvedDamage);
-	DamageMaker->MakeDamage(HitActor, ResolvedDamage, HitResult);
+	AttackSweepResult.bHit = true;
+	AttackSweepResult.HitActor = HitActor;
+	AttackSweepResult.HitResult = HitResult;
+	AttackSweepResult.Damage = ResolvedDamage;
+	return AttackSweepResult;
 }
 
 void UGPCombatComponent::ServerHandleAttackInput_Implementation()
